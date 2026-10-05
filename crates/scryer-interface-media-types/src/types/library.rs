@@ -3,8 +3,9 @@ use super::{
     FillerPolicyValue, ImportDecisionValue, ImportModeValue, ImportSkipReasonValue,
     ImportStatusValue, ImportTypeValue, IndexerRoutingEntryInput, IndexerRoutingEntryPayload,
     JobRunPayload, Long, ManualImportCandidateMappingInput, MediaFacetValue, MonitorSelectionInput,
-    MonitorTypeValue, PendingImportStatusValue, RecapPolicyValue, ReleaseNumberingValue,
-    RenameCollisionPolicyValue, RenameMissingMetadataPolicyValue, ScoringPersonaValue,
+    MonitorTypeValue, MovieRootLayoutValue, PendingImportStatusValue, RecapPolicyValue,
+    ReleaseNumberingValue, RenameCollisionPolicyValue, RenameMissingMetadataPolicyValue,
+    ScoringPersonaValue,
 };
 use async_graphql::{Enum, ID, InputObject, MaybeUndefined, OneofObject, SimpleObject};
 use chrono::{DateTime, Utc};
@@ -110,6 +111,10 @@ pub struct LibrarySettingsPayload {
     pub indexer_routing_override: Option<Vec<IndexerRoutingEntryPayload>>,
     /// Library override download-client routing entries; null means inherit.
     pub download_client_routing_override: Option<Vec<DownloadClientRoutingEntryPayload>>,
+    /// Library override for the movie root layout; null keeps the folders default.
+    pub movie_root_layout_override: Option<MovieRootLayoutValue>,
+    /// Effective movie root layout (folders default when no override).
+    pub movie_root_layout: MovieRootLayoutValue,
 }
 
 #[derive(SimpleObject, Clone)]
@@ -1162,6 +1167,8 @@ pub struct LibrarySettingsInput {
     pub indexer_routing: Option<Vec<IndexerRoutingEntryInput>>,
     /// Download-client routing rules for this library.
     pub download_client_routing: Option<Vec<DownloadClientRoutingEntryInput>>,
+    /// Movie root layout; null keeps the folders default. Movie libraries only.
+    pub movie_root_layout: Option<MovieRootLayoutValue>,
 }
 
 #[derive(SimpleObject, Clone)]

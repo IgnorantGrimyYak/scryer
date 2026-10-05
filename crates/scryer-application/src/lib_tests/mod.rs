@@ -92,6 +92,7 @@ use support_acquisition_downloads::*;
 pub(crate) use support_bootstrap_fixtures::bootstrap;
 #[cfg(unix)]
 pub(crate) use support_bootstrap_fixtures::bootstrap_application_upgrade;
+pub(crate) use support_bootstrap_fixtures::bootstrap_with_scan_unmatched_items;
 use support_bootstrap_fixtures::*;
 use support_catalog::*;
 use support_events_requests::*;

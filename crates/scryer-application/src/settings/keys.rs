@@ -150,6 +150,13 @@ pub(crate) fn default_indexer_routing_categories_for_scope(scope_id: &str) -> Ve
 
 pub const MOVIES_PATH_KEY: &str = "movies.path";
 pub const SERIES_PATH_KEY: &str = "series.path";
+// Per-movie-library root layout, stored with scope_id = the library id:
+// "folders" (default — one subfolder per title) or "flat" (media files sit
+// directly in the library root). An absent row always means the folders
+// default, so a library that never touches the setting is unchanged.
+pub const MOVIE_LIBRARY_LAYOUT_KEY: &str = "library.movie_layout";
+pub const MOVIE_LIBRARY_LAYOUT_FOLDERS: &str = "folders";
+pub const MOVIE_LIBRARY_LAYOUT_FLAT: &str = "flat";
 pub const ANIME_PATH_KEY: &str = "anime.path";
 pub const MOVIES_ROOT_FOLDERS_KEY: &str = "movies.root_folders";
 pub const SERIES_ROOT_FOLDERS_KEY: &str = "series.root_folders";

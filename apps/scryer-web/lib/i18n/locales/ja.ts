@@ -367,6 +367,9 @@ const ja: LocaleDictionary = {
     "このルートフォルダはすでに {{libraries}} で使われています。",
   "settings.rootFolderSetDefault": "デフォルトに設定",
   "settings.libraryScanTitle": "ライブラリスキャン",
+  "settings.libraryMovieLayoutLabel": "メディアの配置",
+  "settings.libraryMovieLayoutFolders": "サブフォルダ（タイトルごとに1フォルダ）",
+  "settings.libraryMovieLayoutFlat": "フラットファイル（メディアをライブラリルート直下に配置）",
   "settings.libraryScanButton": "ライブラリをスキャン",
   "settings.libraryScanRunning": "ライブラリスキャン中…",
   "settings.libraryScanSummary":
@@ -980,6 +983,8 @@ const ja: LocaleDictionary = {
     "{{name}} は {{folder}} を失い、現在は未一致です。保留中のインポートで修復してください。理由は「フォルダーの所有権がユーザーによって変更されました」と表示されます。",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "フォルダーの所有権がユーザーによって変更されました",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "このファイルは、すでにフォルダを所有するタイトルと一致します。そのフォルダに移動するか、このライブラリをサブフォルダ方式に戻してください。",
   "pendingImports.folderOwnershipChangedHelp":
     "このフォルダーは別のタイトルに割り当てられたため、このタイトルにはフォルダーがありません。タイトルを開いて「フォルダーを変更」で正しいフォルダーを指定するか、「無視」でこの項目を非表示にしてください。",
   "pendingImports.title": "保留中のインポート",

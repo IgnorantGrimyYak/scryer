@@ -104,6 +104,7 @@ fn library_settings_draft(
                 )
                 .collect()
         }),
+        movie_root_layout: input.movie_root_layout.map(Into::into),
     })
 }
 
@@ -621,5 +622,55 @@ impl LibraryMutations {
             language,
             titles_cleared: i64::try_from(cleared).unwrap_or(i64::MAX),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input_with_movie_root_layout(layout: Option<MovieRootLayoutValue>) -> LibrarySettingsInput {
+        LibrarySettingsInput {
+            required_audio_languages: None,
+            metadata_language: None,
+            use_season_folders: None,
+            quality_profile_id: None,
+            request_quality_profile_ids: None,
+            scoring_persona: None,
+            filler_policy: None,
+            recap_policy: None,
+            monitor_specials: None,
+            inter_season_movies: None,
+            monitor_filler_movies: None,
+            nfo_write_on_import: None,
+            plexmatch_write_on_import: None,
+            import_mode: None,
+            set_permissions_linux: None,
+            file_chmod: None,
+            folder_chmod: None,
+            chown_group: None,
+            indexer_routing: None,
+            download_client_routing: None,
+            movie_root_layout: layout,
+        }
+    }
+
+    #[test]
+    fn library_settings_draft_maps_flat_movie_root_layout() {
+        let draft = library_settings_draft(input_with_movie_root_layout(Some(
+            MovieRootLayoutValue::Flat,
+        )))
+        .expect("draft should build");
+        assert_eq!(
+            draft.movie_root_layout,
+            Some(scryer_application::MovieRootLayout::Flat)
+        );
+    }
+
+    #[test]
+    fn library_settings_draft_keeps_movie_root_layout_none_when_omitted() {
+        let draft =
+            library_settings_draft(input_with_movie_root_layout(None)).expect("draft should build");
+        assert_eq!(draft.movie_root_layout, None);
     }
 }

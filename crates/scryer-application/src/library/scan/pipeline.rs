@@ -253,6 +253,13 @@ pub(super) async fn run_library_scan_pipeline(
     let coordinator = LibraryScanCoordinator::new(app.clone(), session_id.to_string());
     require_directory_library_path(library_path)?;
 
+    // One layout read per scan run: series pipelines ignore it, movie
+    // pipelines decide whether loose root files are candidates.
+    let movie_root_layout = match kind {
+        LibraryScanPipelineKind::Movie => resolve_movie_library_layout(app, library_id).await,
+        LibraryScanPipelineKind::Series => MovieRootLayout::Folders,
+    };
+
     let (candidate_events_tx, mut candidate_events_rx) = tokio::sync::mpsc::unbounded_channel();
     let (inventory_events_tx, mut inventory_events_rx) = tokio::sync::mpsc::unbounded_channel();
     let (match_input_tx, match_input_rx) =
@@ -265,6 +272,7 @@ pub(super) async fn run_library_scan_pipeline(
         session_id: session_id.to_string(),
         library_path: library_path.to_string(),
         kind,
+        movie_root_layout,
         scan_hints,
         mark_discovery_complete_on_drain,
         cancel_token: cancel_token.clone(),
@@ -1748,6 +1756,7 @@ struct CandidateJobContext {
     session_id: String,
     library_path: String,
     kind: LibraryScanPipelineKind,
+    movie_root_layout: MovieRootLayout,
     scan_hints: Option<LibraryScanHintSet>,
     mark_discovery_complete_on_drain: bool,
     cancel_token: Option<CancellationToken>,
@@ -2129,8 +2138,12 @@ impl<'a> CandidateJobRunner<'a> {
 
 async fn run_movie_candidate_jobs(ctx: &CandidateJobContext) -> AppResult<()> {
     let root = require_directory_library_path(&ctx.library_path)?.to_path_buf();
-    let discovered_entries =
-        stream_movie_top_level_entries_batched(&root, LIBRARY_SCAN_MOVIE_BATCH_SIZE).await?;
+    let discovered_entries = stream_movie_top_level_entries_batched(
+        &root,
+        LIBRARY_SCAN_MOVIE_BATCH_SIZE,
+        ctx.movie_root_layout,
+    )
+    .await?;
     let mut queued_entries = spawn_library_discovery_queue(
         ctx.app.clone(),
         ctx.session_id.clone(),

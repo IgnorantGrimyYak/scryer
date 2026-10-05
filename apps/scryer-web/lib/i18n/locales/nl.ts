@@ -422,6 +422,10 @@ const nl: LocaleDictionary = {
   "settings.unsavedLibraryChangesConfirm":
     "Je niet-opgeslagen bibliotheekwijzigingen negeren en deze pagina verlaten?",
   "settings.libraryScanTitle": "Bibliotheekscan",
+  "settings.libraryMovieLayoutLabel": "Media-indeling",
+  "settings.libraryMovieLayoutFolders": "Ondermappen (één map per titel)",
+  "settings.libraryMovieLayoutFlat":
+    "Vlakke bestanden (media direct in de bibliotheekroot)",
   "settings.libraryScanButton": "Bibliotheek scannen",
   "settings.libraryScanRunning": "Bibliotheek scannen…",
   "settings.libraryScanSummary":
@@ -1350,6 +1354,8 @@ const nl: LocaleDictionary = {
   "pendingImports.library": "Bibliotheek:",
   "pendingImports.knownTitle": "Bekende titel:",
   "pendingImports.reason.title_already_owns_another_folder": "Titel heeft al een andere map",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Dit bestand komt overeen met een titel die al een map bezit. Verplaats het naar die map of zet deze bibliotheek terug op ondermappen.",
   "pendingImports.ownershipConflictHelp":
     "De media van deze titel staan in een andere map, en een titel heeft precies één map. Verplaats dit bestand naar de map van de titel (of verwijder deze dubbele map) en scan opnieuw; gebruik Negeren om het te verbergen. Als dit een andere film is die alleen de naam deelt (een remake of het origineel), matcht een rescan na update 0.18.13 het vanzelf.",
   "pendingImports.bindEpisodes": "Afleveringen koppelen",

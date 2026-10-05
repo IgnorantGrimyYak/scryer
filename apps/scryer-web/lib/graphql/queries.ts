@@ -1640,6 +1640,8 @@ export const librarySettingsQuery = `query LibrarySettings($libraryId: ID!) {
       removeFailed
       seedingProfileId
     }
+    movieRootLayoutOverride
+    movieRootLayout
   }
 }`;
 

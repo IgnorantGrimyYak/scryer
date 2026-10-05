@@ -38,6 +38,10 @@ pub struct LibrarySettingsOverrideDraft {
     pub chown_group: Option<String>,
     pub indexer_routing: Option<Vec<IndexerRoutingSettingsEntry>>,
     pub download_client_routing: Option<Vec<DownloadClientRoutingSettingsEntry>>,
+    /// Movie libraries only: how media is arranged under the library root.
+    /// `None` means "unset" and keeps the folders default; setting it on a
+    /// non-movie library is a validation error.
+    pub movie_root_layout: Option<MovieRootLayout>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -104,6 +108,11 @@ pub struct LibrarySettings {
     pub chown_group: Option<String>,
     pub indexer_routing_override: Option<Vec<IndexerRoutingSettingsEntry>>,
     pub download_client_routing_override: Option<Vec<DownloadClientRoutingSettingsEntry>>,
+    /// Movie libraries only: the stored per-library layout override, if any.
+    pub movie_root_layout_override: Option<MovieRootLayout>,
+    /// Movie libraries only: the effective layout (override, else the
+    /// folders default). Series and anime libraries are always Folders.
+    pub movie_root_layout: MovieRootLayout,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

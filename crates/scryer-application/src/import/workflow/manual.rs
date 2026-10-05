@@ -1861,8 +1861,7 @@ pub async fn begin_manual_import_selection(
     if archive_extraction_needed && extract_archives {
         let destination =
             archive_extraction_destination_for_title(app, &selection_id, &authorized.title).await?;
-        let passwords =
-            archive_password_candidates(app, &completed, &release_evidence, None).await;
+        let passwords = archive_password_candidates(app, &completed, &release_evidence, None).await;
         let extracted_root = {
             let _archive_extraction_permit = app
                 .runtime
@@ -3086,8 +3085,15 @@ pub(crate) async fn execute_manual_import_with_release_evidence(
         folder_template,
         season_folder_template,
         specials_folder_template,
+        movie_root_layout,
     } = resolve_import_paths(app, &title).await?;
-    let full_folder_path = effective_title_folder_path(&media_root, &title, &folder_template, None);
+    let full_folder_path = effective_title_folder_path(
+        &media_root,
+        &title,
+        &folder_template,
+        None,
+        movie_root_layout,
+    );
     ensure_import_title_folder_available(app, &title, &full_folder_path).await?;
     let quality_profile = resolve_import_quality_profile(app, &title).await?;
     let movie_primary_index = (title.facet == MediaFacet::Movie)

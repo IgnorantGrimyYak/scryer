@@ -362,6 +362,9 @@ const ko: LocaleDictionary = {
     "이 루트 폴더는 이미 {{libraries}}에서 사용 중입니다.",
   "settings.rootFolderSetDefault": "기본값으로 설정",
   "settings.libraryScanTitle": "라이브러리 스캔",
+  "settings.libraryMovieLayoutLabel": "미디어 배치",
+  "settings.libraryMovieLayoutFolders": "하위 폴더(제목당 폴더 하나)",
+  "settings.libraryMovieLayoutFlat": "플랫 파일(미디어를 라이브러리 루트에 직접 배치)",
   "settings.libraryScanButton": "라이브러리 스캔",
   "settings.libraryScanRunning": "라이브러리 스캔 중…",
   "settings.libraryScanSummary":
@@ -964,6 +967,8 @@ const ko: LocaleDictionary = {
     "{{name}}이(가) {{folder}}을(를) 잃고 이제 일치하지 않는 상태입니다. 보류 중인 가져오기에서 복구하세요. '사용자가 폴더 소유권을 변경함' 사유로 표시됩니다.",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "사용자가 폴더 소유권을 변경함",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "이 파일은 이미 폴더를 가진 제목과 일치합니다. 그 폴더로 이동하거나 이 라이브러리를 하위 폴더 방식으로 되돌리세요.",
   "pendingImports.folderOwnershipChangedHelp":
     "이 폴더가 다른 제목에 할당되어 이 제목에는 폴더가 없습니다. 제목을 열고 폴더 변경으로 올바른 폴더를 지정하거나, 무시를 사용해 이 항목을 숨기세요.",
   "pendingImports.title": "보류 중인 수입품",

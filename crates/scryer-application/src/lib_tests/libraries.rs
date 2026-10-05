@@ -708,6 +708,94 @@ async fn library_sidecar_settings_resolve_facet_defaults_and_library_overrides()
 }
 
 #[tokio::test]
+async fn movie_library_root_layout_override_round_trips_through_library_settings() {
+    let (app, user) = bootstrap();
+    let movie_library_id = scryer_domain::default_library_id_for_facet(&MediaFacet::Movie);
+
+    // No stored row: the override is absent and the effective layout is the
+    // folders default, including for the scan-side resolver.
+    let baseline = app
+        .get_library_settings(&user, &movie_library_id)
+        .await
+        .expect("movie library settings should load");
+    assert_eq!(baseline.movie_root_layout_override, None);
+    assert_eq!(baseline.movie_root_layout, MovieRootLayout::Folders);
+    assert_eq!(
+        crate::library_discovery::resolve_movie_library_layout(&app, &movie_library_id).await,
+        MovieRootLayout::Folders
+    );
+
+    // Flipping the toggle stores the flat override and every read sees it.
+    app.update_library_settings(
+        &user,
+        &movie_library_id,
+        LibrarySettingsOverrideDraft {
+            movie_root_layout: Some(MovieRootLayout::Flat),
+            ..empty_library_settings_override()
+        },
+    )
+    .await
+    .expect("flat layout override should save");
+    let flat = app
+        .get_library_settings(&user, &movie_library_id)
+        .await
+        .expect("movie library settings should reload");
+    assert_eq!(flat.movie_root_layout_override, Some(MovieRootLayout::Flat));
+    assert_eq!(flat.movie_root_layout, MovieRootLayout::Flat);
+    assert_eq!(
+        crate::library_discovery::resolve_movie_library_layout(&app, &movie_library_id).await,
+        MovieRootLayout::Flat
+    );
+
+    // Clearing the override deletes the row and restores the folders default.
+    app.update_library_settings(&user, &movie_library_id, empty_library_settings_override())
+        .await
+        .expect("layout override should clear");
+    let cleared = app
+        .get_library_settings(&user, &movie_library_id)
+        .await
+        .expect("movie library settings should reload after clear");
+    assert_eq!(cleared.movie_root_layout_override, None);
+    assert_eq!(cleared.movie_root_layout, MovieRootLayout::Folders);
+    assert_eq!(
+        crate::library_discovery::resolve_movie_library_layout(&app, &movie_library_id).await,
+        MovieRootLayout::Folders
+    );
+}
+
+#[tokio::test]
+async fn movie_library_root_layout_override_rejects_non_movie_libraries() {
+    let (app, user) = bootstrap();
+    let series_library_id = scryer_domain::default_library_id_for_facet(&MediaFacet::Series);
+
+    let error = app
+        .update_library_settings(
+            &user,
+            &series_library_id,
+            LibrarySettingsOverrideDraft {
+                movie_root_layout: Some(MovieRootLayout::Flat),
+                ..empty_library_settings_override()
+            },
+        )
+        .await
+        .expect_err("movie root layout must be rejected for a series library");
+    assert!(
+        error
+            .to_string()
+            .contains("movie root layout is only valid for movie libraries"),
+        "unexpected error: {error:?}"
+    );
+
+    // Series settings never surface a layout override, effective or stored.
+    let series = app
+        .get_library_settings(&user, &series_library_id)
+        .await
+        .expect("series library settings should load");
+    assert_eq!(series.movie_root_layout_override, None);
+    assert_eq!(series.movie_root_layout, MovieRootLayout::Folders);
+}
+
+#[tokio::test]
 async fn library_import_permission_settings_resolve_facet_defaults_and_library_overrides() {
     let (app, user) = bootstrap();
     let series_library_id = scryer_domain::default_library_id_for_facet(&MediaFacet::Series);

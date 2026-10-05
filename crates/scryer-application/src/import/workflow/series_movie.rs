@@ -219,9 +219,16 @@ pub(super) async fn archive_extraction_destination_for_title(
     let ImportPathSettings {
         media_root,
         folder_template,
+        movie_root_layout,
         ..
     } = resolve_import_paths(app, title).await?;
-    let staging_parent = effective_title_folder_path(&media_root, title, &folder_template, None);
+    let staging_parent = effective_title_folder_path(
+        &media_root,
+        title,
+        &folder_template,
+        None,
+        movie_root_layout,
+    );
     persist_title_folder_path_if_missing(app, title, &staging_parent).await?;
     Ok(
         crate::archive_extractor::ArchiveExtractionDestination::new(staging_parent, import_id)
@@ -1227,14 +1234,20 @@ async fn import_additional_movie_download(
     rename_enabled: bool,
     rename_template: &str,
     folder_template: &str,
+    movie_root_layout: MovieRootLayout,
     canonical_dest_path: Option<&Path>,
     series_movie_context: Option<SeriesMovieAdditionalImportContext<'_>>,
     existing_files: &[crate::TitleMediaFile],
     started_at: chrono::DateTime<Utc>,
 ) -> AppResult<ImportResult> {
     let source_title = release_evidence.release_title(Some(source_video));
-    let full_folder_path =
-        effective_title_folder_path(media_root, title, folder_template, parsed.year);
+    let full_folder_path = effective_title_folder_path(
+        media_root,
+        title,
+        folder_template,
+        parsed.year,
+        movie_root_layout,
+    );
     ensure_import_title_folder_available(app, title, &full_folder_path).await?;
     let canonical_dest_path = if let Some(canonical_dest_path) = canonical_dest_path {
         canonical_dest_path.to_path_buf()
@@ -1517,6 +1530,7 @@ async fn import_movie_download(
         rename_enabled,
         rename_template,
         folder_template,
+        movie_root_layout,
         ..
     } = resolve_import_paths(app, title).await?;
 
@@ -1550,6 +1564,7 @@ async fn import_movie_download(
             rename_enabled,
             &rename_template,
             &folder_template,
+            movie_root_layout,
             None,
             None,
             &existing_files,
@@ -1697,8 +1712,13 @@ async fn import_movie_download(
         preserved_import_filename(&source_video)
     };
 
-    let full_folder_path =
-        effective_title_folder_path(&media_root, title, &folder_template, prepared.parsed.year);
+    let full_folder_path = effective_title_folder_path(
+        &media_root,
+        title,
+        &folder_template,
+        prepared.parsed.year,
+        movie_root_layout,
+    );
     ensure_import_title_folder_available(app, title, &full_folder_path).await?;
 
     let dest_path = full_folder_path.join(&rendered_filename);
@@ -2333,6 +2353,7 @@ async fn import_series_movie_download(
         folder_template,
         season_folder_template,
         specials_folder_template,
+        movie_root_layout,
     } = resolve_import_paths(app, title).await?;
 
     // A series movie is searched and grabbed under the movie's identity
@@ -2373,7 +2394,13 @@ async fn import_series_movie_download(
         preserved_import_filename(&source_video)
     };
 
-    let full_folder_path = effective_title_folder_path(&media_root, title, &folder_template, None);
+    let full_folder_path = effective_title_folder_path(
+        &media_root,
+        title,
+        &folder_template,
+        None,
+        movie_root_layout,
+    );
     ensure_import_title_folder_available(app, title, &full_folder_path).await?;
     let use_season_folders = app.resolve_use_season_folders(title).await?;
     let dest_path = episodic_import_parent_path(
@@ -2432,6 +2459,7 @@ async fn import_series_movie_download(
             rename_enabled,
             &rename_template,
             &folder_template,
+            movie_root_layout,
             Some(&dest_path),
             Some(SeriesMovieAdditionalImportContext {
                 series_movie_link_id,

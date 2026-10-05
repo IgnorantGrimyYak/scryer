@@ -20,6 +20,7 @@ use crate::domain_events::{
     created_media_update, deleted_media_update, new_title_domain_event, title_context_snapshot,
 };
 use crate::facet_handler::{RenameFacetSettings, rename_facet_settings};
+use crate::library_discovery::MovieRootLayout;
 use crate::media::release_labels::resolve_release_labels_from_analysis;
 use crate::stored_paths::{path_to_stored_string, stored_path_to_path_buf};
 use crate::{
@@ -2512,6 +2513,7 @@ pub(crate) fn effective_title_folder_path(
     title: &Title,
     folder_template: &str,
     parsed_year: Option<i32>,
+    movie_root_layout: MovieRootLayout,
 ) -> PathBuf {
     title
         .folder_path
@@ -2520,6 +2522,12 @@ pub(crate) fn effective_title_folder_path(
         .filter(|value| !value.is_empty())
         .map(stored_path_to_path_buf)
         .unwrap_or_else(|| {
+            if movie_root_layout.is_flat() && title.facet == MediaFacet::Movie {
+                // Flat movie libraries keep media loose in the root, so a
+                // folderless title resolves to the root itself instead of a
+                // rendered subfolder (which would be created on import).
+                return PathBuf::from(media_root);
+            }
             configured_title_folder_path(media_root, title, folder_template, parsed_year)
         })
 }

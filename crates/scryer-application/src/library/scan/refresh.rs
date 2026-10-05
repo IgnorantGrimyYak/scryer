@@ -173,7 +173,11 @@ async fn maybe_probe_existing_movie_title_for_background_refresh(
                 .iter()
                 .map(|file| file.path.clone())
                 .collect::<HashSet<_>>();
-            let scan_folder_path = Some(path_to_stored_string(&entry.path));
+            // A loose file is its own scan unit and must never become a
+            // containment boundary: treating the probed file's path as the
+            // scan folder would read sibling files as "outside the title" and
+            // detach them (detaching and re-attaching on every refresh).
+            let scan_folder_path = entry.is_dir.then(|| path_to_stored_string(&entry.path));
             let mut cleanup = LibraryScanMovieCleanupContext {
                 canonical_folder_path: title
                     .folder_path
@@ -422,7 +426,9 @@ pub(super) async fn background_refresh_movies(
     let coordinator = LibraryScanCoordinator::new(app.clone(), session_id.to_string());
     let root = require_directory_library_path(library_path)?;
 
-    let entries = list_movie_top_level_entries(root).await?;
+    // One layout read per refresh run; series refreshes never reach here.
+    let movie_root_layout = resolve_movie_library_layout(app, library_id).await;
+    let entries = list_movie_top_level_entries(root, movie_root_layout).await?;
     coordinator
         .register_discovery_batch(entries.len(), false)
         .await;

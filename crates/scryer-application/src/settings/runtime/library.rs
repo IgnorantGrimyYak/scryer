@@ -975,6 +975,14 @@ impl AppUseCase {
         let download_client_routing_override = self
             .load_download_client_routing_override(&library.id)
             .await?;
+        let movie_root_layout_override = if library.facet == MediaFacet::Movie {
+            self.read_setting_string_value_explicit(MOVIE_LIBRARY_LAYOUT_KEY, Some(&library.id))
+                .await?
+                .map(|value| MovieRootLayout::from_stored_value(&value))
+        } else {
+            None
+        };
+        let movie_root_layout = movie_root_layout_override.unwrap_or_default();
 
         Ok(LibrarySettings {
             required_audio_languages_override,
@@ -1015,6 +1023,8 @@ impl AppUseCase {
             chown_group_override,
             chown_group: import_permissions.chown_group,
             indexer_routing_override,
+            movie_root_layout_override,
+            movie_root_layout,
             download_client_routing_override,
         })
     }
@@ -1471,6 +1481,11 @@ impl AppUseCase {
                 "season folders are only valid for series and anime libraries".to_string(),
             ));
         }
+        if settings.movie_root_layout.is_some() && library.facet != MediaFacet::Movie {
+            return Err(AppError::Validation(
+                "movie root layout is only valid for movie libraries".to_string(),
+            ));
+        }
         if library.facet == MediaFacet::Movie && settings.plexmatch_write_on_import.is_some() {
             return Err(AppError::Validation(
                 "plexmatch_write_on_import is only valid for series and anime libraries"
@@ -1753,6 +1768,19 @@ impl AppUseCase {
                 .await?;
         }
 
+        if let Some(layout) = settings.movie_root_layout {
+            self.upsert_scoped_system_setting_json(
+                MOVIE_LIBRARY_LAYOUT_KEY,
+                &library.id,
+                &layout.as_str(),
+                Some(actor.id.clone()),
+            )
+            .await?;
+        } else {
+            self.delete_scoped_system_setting(MOVIE_LIBRARY_LAYOUT_KEY, &library.id)
+                .await?;
+        }
+
         if let Some(entries) = settings.indexer_routing {
             let payload = indexer_routing_payload(entries)?;
             self.upsert_scoped_system_setting_json(
@@ -1798,6 +1826,7 @@ impl AppUseCase {
             REQUIRED_AUDIO_LANGUAGES_KEY.to_string(),
             METADATA_LANGUAGE_KEY.to_string(),
             USE_SEASON_FOLDERS_KEY.to_string(),
+            MOVIE_LIBRARY_LAYOUT_KEY.to_string(),
             QUALITY_PROFILE_ID_KEY.to_string(),
             REQUEST_QUALITY_PROFILE_IDS_KEY.to_string(),
             SCORING_PERSONA_KEY.to_string(),

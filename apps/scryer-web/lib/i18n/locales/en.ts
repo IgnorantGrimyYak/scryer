@@ -585,6 +585,10 @@ const en: LocaleDictionary = {
   "settings.unsavedLibraryChangesConfirm":
     "Discard your unsaved library changes and leave this page?",
   "settings.libraryScanTitle": "Library scan",
+  "settings.libraryMovieLayoutLabel": "Media layout",
+  "settings.libraryMovieLayoutFolders": "Subfolders (one folder per title)",
+  "settings.libraryMovieLayoutFlat":
+    "Flat files (media directly in the library root)",
   "settings.libraryScanButton": "Scan library",
   "settings.libraryScanRunning": "Scanning library…",
   "settings.libraryScanSummary":
@@ -1610,6 +1614,8 @@ const en: LocaleDictionary = {
   "pendingImports.library": "Library:",
   "pendingImports.knownTitle": "Known title:",
   "pendingImports.reason.title_already_owns_another_folder": "Title already owns another folder",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "This file matches a title that already owns a folder. Move it into that folder, or switch this library back to subfolders.",
   "pendingImports.reason.metadata_id_lookup_unresolved":
     "Metadata lookup could not resolve this folder's external id; the next scan retries it",
   "pendingImports.reason.folder_ownership_changed_by_user":

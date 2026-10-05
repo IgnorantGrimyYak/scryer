@@ -29,6 +29,12 @@ pub(crate) const LIBRARY_SCAN_TITLE_ALREADY_OWNS_ANOTHER_FOLDER: &str =
 pub(crate) const LIBRARY_SCAN_FOLDER_OWNERSHIP_CHANGED_BY_USER: &str =
     "folder_ownership_changed_by_user";
 
+/// A loose root file matched a title that already owns a folder (opposite
+/// layout under the movie root-layout toggle). Kept stably unmatched in
+/// both layouts so one title never mixes loose and folder-owned files.
+pub(crate) const LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE: &str =
+    "loose_file_matches_folder_owned_title";
+
 #[derive(Clone, Debug)]
 struct MovieUnmatchedScanRecord {
     path: String,

@@ -68,6 +68,7 @@ async fn discover_episodic_title_files_for_progress(
         title,
         &import_paths.folder_template,
         None,
+        import_paths.movie_root_layout,
     );
     if !episodic_title_directory_present(&title_dir).await? {
         return Ok(Vec::new());
@@ -238,6 +239,7 @@ async fn discover_movie_title_files(
                 title,
                 &import_paths.folder_template,
                 None,
+                import_paths.movie_root_layout,
             )
         });
     if default_candidate_path != media_root_path
@@ -2460,6 +2462,7 @@ impl AppUseCase {
             &title,
             &import_paths.folder_template,
             None,
+            import_paths.movie_root_layout,
         );
         let title_dir_str = path_to_stored_string(&title_dir);
         debug!(

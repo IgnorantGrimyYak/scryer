@@ -345,6 +345,8 @@ export type TotpEnrollmentComplete = {
 
 export type ImportMode = "HARDLINK_OR_COPY" | "MOVE";
 
+export type MovieRootLayout = "FOLDERS" | "FLAT";
+
 export type MediaSettings = {
   scope: "MOVIE" | "SERIES" | "ANIME";
   libraryPath: string;

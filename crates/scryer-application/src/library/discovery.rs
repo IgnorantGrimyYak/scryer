@@ -90,6 +90,62 @@ pub(crate) struct MovieTopLevelEntry {
     pub(crate) is_dir: bool,
 }
 
+/// How a movie library arranges its media under the library root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MovieRootLayout {
+    /// One subfolder per title (the default): subfolders are the only
+    /// top-level entries a scan emits, and loose media files are skipped.
+    #[default]
+    Folders,
+    /// Media files sit directly in the library root: loose video files are
+    /// emitted as candidates and directory entries are not emitted at all.
+    Flat,
+}
+
+impl MovieRootLayout {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Folders => MOVIE_LIBRARY_LAYOUT_FOLDERS,
+            Self::Flat => MOVIE_LIBRARY_LAYOUT_FLAT,
+        }
+    }
+
+    /// Only the exact stored value `"flat"` selects flat mode; anything else
+    /// (a missing or garbled row) keeps the folders default.
+    pub fn from_stored_value(value: &str) -> Self {
+        if value.trim() == MOVIE_LIBRARY_LAYOUT_FLAT {
+            Self::Flat
+        } else {
+            Self::Folders
+        }
+    }
+
+    pub fn is_flat(self) -> bool {
+        self == Self::Flat
+    }
+}
+
+/// Resolve a movie library's root layout from its per-library settings row.
+/// An absent or unreadable row falls back to the folders default, so a lost
+/// setting can never switch a library's layout out from under it.
+pub async fn resolve_movie_library_layout(app: &AppUseCase, library_id: &str) -> MovieRootLayout {
+    match app
+        .read_setting_string_value(MOVIE_LIBRARY_LAYOUT_KEY, Some(library_id))
+        .await
+    {
+        Ok(Some(value)) => MovieRootLayout::from_stored_value(&value),
+        Ok(None) => MovieRootLayout::Folders,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                library_id,
+                "failed to read movie library layout setting; using the folders default"
+            );
+            MovieRootLayout::Folders
+        }
+    }
+}
+
 type LibraryPathBatch = Vec<PathBuf>;
 pub(crate) type LibraryPathBatchReceiver = tokio::sync::mpsc::Receiver<AppResult<LibraryPathBatch>>;
 pub(crate) type MovieTopLevelEntryBatchReceiver =
@@ -219,6 +275,7 @@ pub(crate) async fn stream_child_directories_batched(
 
 pub(crate) async fn list_movie_top_level_entries(
     root: &Path,
+    layout: MovieRootLayout,
 ) -> AppResult<Vec<MovieTopLevelEntry>> {
     let mut entries = tokio::fs::read_dir(root).await.map_err(|error| {
         AppError::Repository(format!("failed to read {}: {error}", root.display()))
@@ -233,8 +290,15 @@ pub(crate) async fn list_movie_top_level_entries(
         let file_type = entry.file_type().await.map_err(|error| {
             AppError::Repository(format!("failed to inspect {}: {error}", path.display()))
         })?;
-        if file_type.is_dir() && !should_skip_library_top_level_entry(&path, true) {
-            results.push(MovieTopLevelEntry { path, is_dir: true });
+        if file_type.is_dir() {
+            if layout.is_flat() {
+                // Flat libraries keep media loose in the root; directories
+                // are not movie candidates there.
+                continue;
+            }
+            if !should_skip_library_top_level_entry(&path, true) {
+                results.push(MovieTopLevelEntry { path, is_dir: true });
+            }
             continue;
         }
 
@@ -246,7 +310,15 @@ pub(crate) async fn list_movie_top_level_entries(
                 .is_some_and(is_ignored_media_extra_file_name)
             && is_allowed_video_path(&path)
         {
-            skipped_loose_media += 1;
+            if layout.is_flat() {
+                // Flat layout: loose video files are the candidates.
+                results.push(MovieTopLevelEntry {
+                    path,
+                    is_dir: false,
+                });
+            } else {
+                skipped_loose_media += 1;
+            }
         }
     }
 
@@ -265,6 +337,7 @@ pub(crate) async fn list_movie_top_level_entries(
 pub(crate) async fn stream_movie_top_level_entries_batched(
     root: &Path,
     batch_size: usize,
+    layout: MovieRootLayout,
 ) -> AppResult<MovieTopLevelEntryBatchReceiver> {
     if batch_size == 0 {
         return Err(AppError::Validation(
@@ -290,8 +363,10 @@ pub(crate) async fn stream_movie_top_level_entries_batched(
                 let file_type = entry.file_type().await.map_err(|error| {
                     AppError::Repository(format!("failed to inspect {}: {error}", path.display()))
                 })?;
-                if file_type.is_dir() && !should_skip_library_top_level_entry(&path, true) {
-                    batch.push(MovieTopLevelEntry { path, is_dir: true });
+                if file_type.is_dir() {
+                    if !layout.is_flat() && !should_skip_library_top_level_entry(&path, true) {
+                        batch.push(MovieTopLevelEntry { path, is_dir: true });
+                    }
                 } else if file_type.is_file()
                     && !should_skip_library_top_level_entry(&path, false)
                     && !path
@@ -300,7 +375,15 @@ pub(crate) async fn stream_movie_top_level_entries_batched(
                         .is_some_and(is_ignored_media_extra_file_name)
                     && is_allowed_video_path(&path)
                 {
-                    skipped_loose_media += 1;
+                    if layout.is_flat() {
+                        // Flat layout: loose video files are the candidates.
+                        batch.push(MovieTopLevelEntry {
+                            path,
+                            is_dir: false,
+                        });
+                    } else {
+                        skipped_loose_media += 1;
+                    }
                 }
 
                 if batch.len() >= batch_size {
@@ -864,7 +947,7 @@ mod tests {
             .await
             .expect(".DS_Store");
 
-        let entries = list_movie_top_level_entries(dir.path())
+        let entries = list_movie_top_level_entries(dir.path(), MovieRootLayout::Folders)
             .await
             .expect("movie entries");
 
@@ -883,6 +966,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_movie_top_level_entries_flat_emits_loose_video_files_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        tokio::fs::create_dir_all(dir.path().join("Movie A"))
+            .await
+            .expect("movie dir");
+        tokio::fs::create_dir_all(dir.path().join("@eaDir"))
+            .await
+            .expect("@eaDir");
+        tokio::fs::write(dir.path().join("Movie.B.2024.mkv"), b"video")
+            .await
+            .expect("movie file");
+        tokio::fs::write(dir.path().join("Movie.B.2024-trailer.mkv"), b"video")
+            .await
+            .expect("movie trailer file");
+        tokio::fs::write(dir.path().join("notes.txt"), b"notes")
+            .await
+            .expect("non-video file");
+        tokio::fs::write(dir.path().join(".DS_Store"), b"junk")
+            .await
+            .expect(".DS_Store");
+
+        let entries = list_movie_top_level_entries(dir.path(), MovieRootLayout::Flat)
+            .await
+            .expect("movie entries");
+
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry
+                    .path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string())
+                .collect::<Vec<_>>(),
+            vec!["Movie.B.2024.mkv".to_string()]
+        );
+        assert!(entries.iter().all(|entry| !entry.is_dir));
+    }
+
+    #[tokio::test]
     async fn stream_movie_top_level_entries_batched_skips_extra_suffix_files() {
         let dir = tempfile::tempdir().expect("tempdir");
         tokio::fs::create_dir_all(dir.path().join("Movie A"))
@@ -895,9 +1019,10 @@ mod tests {
             .await
             .expect("movie trailer file");
 
-        let mut receiver = stream_movie_top_level_entries_batched(dir.path(), 1)
-            .await
-            .expect("movie entry stream");
+        let mut receiver =
+            stream_movie_top_level_entries_batched(dir.path(), 1, MovieRootLayout::Folders)
+                .await
+                .expect("movie entry stream");
         let mut entries = Vec::new();
         while let Some(batch) = receiver.recv().await {
             entries.extend(batch.expect("movie entry batch"));
@@ -916,6 +1041,53 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["Movie A".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn stream_movie_top_level_entries_batched_flat_emits_loose_video_files_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        tokio::fs::create_dir_all(dir.path().join("Movie A"))
+            .await
+            .expect("movie dir");
+        tokio::fs::write(dir.path().join("Movie.B.2024.mkv"), b"video")
+            .await
+            .expect("movie file");
+        tokio::fs::write(dir.path().join("Movie.C.2024.mkv"), b"video")
+            .await
+            .expect("second movie file");
+        tokio::fs::write(dir.path().join("Movie.B.2024-trailer.mkv"), b"video")
+            .await
+            .expect("movie trailer file");
+        tokio::fs::write(dir.path().join("notes.txt"), b"notes")
+            .await
+            .expect("non-video file");
+
+        let mut receiver =
+            stream_movie_top_level_entries_batched(dir.path(), 1, MovieRootLayout::Flat)
+                .await
+                .expect("movie entry stream");
+        let mut entries = Vec::new();
+        while let Some(batch) = receiver.recv().await {
+            entries.extend(batch.expect("movie entry batch"));
+        }
+
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry
+                    .path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string())
+                .collect::<Vec<_>>(),
+            vec![
+                "Movie.B.2024.mkv".to_string(),
+                "Movie.C.2024.mkv".to_string(),
+            ]
+        );
+        assert!(entries.iter().all(|entry| !entry.is_dir));
     }
 
     #[test]

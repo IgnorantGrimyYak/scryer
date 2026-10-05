@@ -367,6 +367,10 @@ const pt_BR: LocaleDictionary = {
     "Esta pasta raiz já está sendo usada por {{libraries}}.",
   "settings.rootFolderSetDefault": "Definir como padrão",
   "settings.libraryScanTitle": "Verificação da biblioteca",
+  "settings.libraryMovieLayoutLabel": "Layout da mídia",
+  "settings.libraryMovieLayoutFolders": "Subpastas (uma pasta por título)",
+  "settings.libraryMovieLayoutFlat":
+    "Arquivos planos (mídia diretamente na raiz da biblioteca)",
   "settings.libraryScanButton": "Verificar biblioteca",
   "settings.libraryScanRunning": "Verificando biblioteca…",
   "settings.libraryScanSummary":
@@ -994,6 +998,8 @@ const pt_BR: LocaleDictionary = {
     "{{name}} perdeu {{folder}} e agora está sem correspondência. Repare-o em Importações pendentes, onde aparece com o motivo «Propriedade da pasta alterada pelo usuário».",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "Propriedade da pasta alterada pelo usuário",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Este arquivo corresponde a um título que já possui uma pasta. Mova-o para essa pasta ou alterne esta biblioteca de volta para subpastas.",
   "pendingImports.folderOwnershipChangedHelp":
     "Esta pasta foi atribuída a outro título, então este título não tem mais nenhuma. Abra o título e use Alterar pasta para apontá-lo para a pasta correta, ou use Ignorar para ocultar este item.",
   "pendingImports.title": "Importações pendentes",

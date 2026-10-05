@@ -371,6 +371,10 @@ const fr: LocaleDictionary = {
     "Ce dossier racine est déjà utilisé par {{libraries}}.",
   "settings.rootFolderSetDefault": "Définir par défaut",
   "settings.libraryScanTitle": "Analyse de la bibliothèque",
+  "settings.libraryMovieLayoutLabel": "Disposition des médias",
+  "settings.libraryMovieLayoutFolders": "Sous-dossiers (un dossier par titre)",
+  "settings.libraryMovieLayoutFlat":
+    "Fichiers à plat (médias directement à la racine de la bibliothèque)",
   "settings.libraryScanButton": "Analyser la bibliothèque",
   "settings.libraryScanRunning": "Analyse de la bibliothèque en cours…",
   "settings.libraryScanSummary":
@@ -1003,6 +1007,8 @@ const fr: LocaleDictionary = {
     "{{name}} a perdu {{folder}} et n'est plus associé. Réparez-le dans Importations en attente, où il apparaît avec le motif « Propriété du dossier modifiée par l'utilisateur ».",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "Propriété du dossier modifiée par l'utilisateur",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Ce fichier correspond à un titre qui possède déjà un dossier. Déplacez-le dans ce dossier ou repassez cette bibliothèque en sous-dossiers.",
   "pendingImports.folderOwnershipChangedHelp":
     "Ce dossier a été attribué à un autre titre, ce titre n'en a donc plus. Ouvrez le titre et utilisez Changer de dossier pour le pointer vers le bon dossier, ou utilisez Ignorer pour masquer cet élément.",
   "pendingImports.title": "Importations en attente",

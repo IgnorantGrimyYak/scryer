@@ -656,6 +656,69 @@ fn configured_title_folder_path_caps_long_component() {
     );
 }
 
+// ── effective_title_folder_path (layout-aware) ────────────────────────────
+
+#[test]
+fn effective_title_folder_path_flat_movie_library_resolves_folderless_title_to_root() {
+    let title = test_movie_title("Neon Cipher");
+    let path = effective_title_folder_path(
+        "/library/movies",
+        &title,
+        "{title} ({year})",
+        None,
+        MovieRootLayout::Flat,
+    );
+    assert_eq!(path, std::path::Path::new("/library/movies"));
+}
+
+#[test]
+fn effective_title_folder_path_flat_layout_keeps_folder_owned_title_on_its_folder() {
+    let mut title = test_movie_title("Neon Cipher");
+    title.folder_path = Some("/library/movies/Neon Cipher (2024)".to_string());
+    let path = effective_title_folder_path(
+        "/library/movies",
+        &title,
+        "{title} ({year})",
+        None,
+        MovieRootLayout::Flat,
+    );
+    assert_eq!(
+        path,
+        std::path::Path::new("/library/movies/Neon Cipher (2024)")
+    );
+}
+
+#[test]
+fn effective_title_folder_path_folders_layout_renders_template_for_folderless_title() {
+    let title = test_movie_title("Neon Cipher");
+    let path = effective_title_folder_path(
+        "/library/movies",
+        &title,
+        "{title} ({year})",
+        None,
+        MovieRootLayout::Folders,
+    );
+    assert_eq!(
+        path,
+        std::path::Path::new("/library/movies/Neon Cipher (2024)")
+    );
+}
+
+#[test]
+fn effective_title_folder_path_flat_layout_does_not_apply_to_series_facet() {
+    let mut title = test_movie_title("Neon Series");
+    title.facet = MediaFacet::Series;
+    title.library_id = scryer_domain::default_library_id_for_facet(&MediaFacet::Series);
+    let path = effective_title_folder_path(
+        "/library/series",
+        &title,
+        "{title}",
+        None,
+        MovieRootLayout::Flat,
+    );
+    assert_eq!(path, std::path::Path::new("/library/series/Neon Series"));
+}
+
 #[cfg(unix)]
 #[test]
 fn infer_title_folder_path_after_rename_decodes_stored_paths() {

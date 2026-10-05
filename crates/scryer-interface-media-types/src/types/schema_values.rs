@@ -1750,3 +1750,31 @@ pub enum VerificationDepthValue {
     /// cannot run.
     Quick,
 }
+
+/// How a movie library arranges media under the library root.
+#[derive(Enum, Copy, Clone, Debug, Eq, PartialEq)]
+#[graphql(rename_items = "SCREAMING_SNAKE_CASE")]
+pub enum MovieRootLayoutValue {
+    /// One subfolder per title; the default layout.
+    Folders,
+    /// Media files sit directly in the library root.
+    Flat,
+}
+
+impl From<scryer_application::MovieRootLayout> for MovieRootLayoutValue {
+    fn from(value: scryer_application::MovieRootLayout) -> Self {
+        match value {
+            scryer_application::MovieRootLayout::Folders => Self::Folders,
+            scryer_application::MovieRootLayout::Flat => Self::Flat,
+        }
+    }
+}
+
+impl From<MovieRootLayoutValue> for scryer_application::MovieRootLayout {
+    fn from(value: MovieRootLayoutValue) -> Self {
+        match value {
+            MovieRootLayoutValue::Folders => Self::Folders,
+            MovieRootLayoutValue::Flat => Self::Flat,
+        }
+    }
+}

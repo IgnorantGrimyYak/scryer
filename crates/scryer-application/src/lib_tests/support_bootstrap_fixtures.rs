@@ -1359,6 +1359,17 @@ pub(super) fn bootstrap_with_scan_unmatched_tracking(
     (app, user)
 }
 
+/// Bootstrap with the scan unmatched-item repository configured, for tests
+/// that drive the candidate-processing functions directly (outside
+/// `lib_tests`) and need guard/mismatch rows to persist.
+pub(crate) fn bootstrap_with_scan_unmatched_items() -> (AppUseCase, User) {
+    bootstrap_with_scan_unmatched_tracking(
+        Arc::new(StoredSettingsRepo::default()),
+        Arc::new(MutableLibraryScanner::default()),
+        Arc::new(TrackingLibraryScanUnmatchedItemRepo::default()),
+    )
+}
+
 pub(super) fn bootstrap_with_library_delete_repositories(
     titles: Arc<MockTitleRepo>,
     settings: Arc<StoredSettingsRepo>,
@@ -1871,6 +1882,7 @@ pub(super) fn empty_library_settings_override() -> LibrarySettingsOverrideDraft 
         chown_group: None,
         indexer_routing: None,
         download_client_routing: None,
+        movie_root_layout: None,
     }
 }
 

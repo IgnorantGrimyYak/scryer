@@ -5,7 +5,7 @@ import type {
   MediaRequestLeaseRecord,
   RequestRuleDecisionRecord,
 } from "./request-rule-sets";
-import type { ImportMode } from "./settings";
+import type { ImportMode, MovieRootLayout } from "./settings";
 
 export type { CanonicalMediaTag };
 
@@ -398,6 +398,8 @@ export type LibrarySettingsRecord = {
   chownGroup: string | null;
   indexerRoutingOverride: unknown[] | null;
   downloadClientRoutingOverride: DownloadClientRoutingEntry[] | null;
+  movieRootLayoutOverride: MovieRootLayout | null;
+  movieRootLayout: MovieRootLayout;
 };
 
 export type LibrarySettingsDraft = {
@@ -421,6 +423,7 @@ export type LibrarySettingsDraft = {
   chownGroup: string | null;
   indexerRouting?: unknown[] | null;
   downloadClientRouting?: DownloadClientRoutingEntry[] | null;
+  movieRootLayout?: MovieRootLayout | null;
 };
 
 export type LibraryScanSummary = {

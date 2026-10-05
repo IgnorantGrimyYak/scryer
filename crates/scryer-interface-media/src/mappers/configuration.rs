@@ -445,6 +445,8 @@ pub fn from_library_settings(settings: LibrarySettings) -> LibrarySettingsPayloa
                     .collect()
             },
         ),
+        movie_root_layout_override: settings.movie_root_layout_override.map(Into::into),
+        movie_root_layout: settings.movie_root_layout.into(),
     }
 }
 
@@ -1075,5 +1077,77 @@ mod option_tests {
         assert_eq!(options[0].config_overrides[0].key, "api_path");
         assert_eq!(options[0].config_overrides[0].value, "/api");
         assert_eq!(options[0].config_overrides[1].key, "base_url");
+    }
+
+    fn library_settings_fixture(
+        override_layout: Option<scryer_application::MovieRootLayout>,
+        effective_layout: scryer_application::MovieRootLayout,
+    ) -> LibrarySettings {
+        LibrarySettings {
+            required_audio_languages_override: None,
+            required_audio_languages: Vec::new(),
+            metadata_language_override: None,
+            metadata_language: String::new(),
+            use_season_folders_override: None,
+            use_season_folders: false,
+            quality_profile_id_override: None,
+            quality_profile_id: String::new(),
+            request_quality_profile_ids_override: None,
+            request_quality_profile_ids: Vec::new(),
+            request_quality_profile_default_id: String::new(),
+            scoring_persona_override: None,
+            scoring_persona: scryer_application::ScoringPersona::default(),
+            filler_policy_override: None,
+            filler_policy: None,
+            recap_policy_override: None,
+            recap_policy: None,
+            monitor_specials_override: None,
+            monitor_specials: None,
+            inter_season_movies_override: None,
+            inter_season_movies: None,
+            monitor_filler_movies_override: None,
+            monitor_filler_movies: None,
+            nfo_write_on_import_override: None,
+            nfo_write_on_import: false,
+            plexmatch_write_on_import_override: None,
+            plexmatch_write_on_import: None,
+            import_mode_override: None,
+            import_mode: scryer_domain::ImportMode::HardlinkOrCopy,
+            set_permissions_linux_override: None,
+            set_permissions_linux: false,
+            file_chmod_override: None,
+            file_chmod: None,
+            folder_chmod_override: None,
+            folder_chmod: None,
+            chown_group_override: None,
+            chown_group: None,
+            indexer_routing_override: None,
+            download_client_routing_override: None,
+            movie_root_layout_override: override_layout,
+            movie_root_layout: effective_layout,
+        }
+    }
+
+    #[test]
+    fn library_settings_payload_maps_movie_root_layout_flat_override() {
+        let payload = from_library_settings(library_settings_fixture(
+            Some(scryer_application::MovieRootLayout::Flat),
+            scryer_application::MovieRootLayout::Flat,
+        ));
+        assert_eq!(
+            payload.movie_root_layout_override,
+            Some(MovieRootLayoutValue::Flat)
+        );
+        assert_eq!(payload.movie_root_layout, MovieRootLayoutValue::Flat);
+    }
+
+    #[test]
+    fn library_settings_payload_defaults_movie_root_layout_to_folders() {
+        let payload = from_library_settings(library_settings_fixture(
+            None,
+            scryer_application::MovieRootLayout::Folders,
+        ));
+        assert_eq!(payload.movie_root_layout_override, None);
+        assert_eq!(payload.movie_root_layout, MovieRootLayoutValue::Folders);
     }
 }

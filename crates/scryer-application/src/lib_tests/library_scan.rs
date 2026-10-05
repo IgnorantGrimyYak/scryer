@@ -5595,6 +5595,226 @@ async fn background_refresh_movies_scans_all_configured_roots() {
     assert_eq!(projected.found_titles, 2);
 }
 
+/// Hazard B regression (locked option a): a flat-layout title with two loose
+/// root files (two qualities of the same movie) keeps both files attached
+/// when one file's probe signature changes and the background refresh runs.
+/// The sibling file must never be read as "outside the title" (the probed
+/// file's path is a file, not a containment boundary), and no unmatched row
+/// may appear for it.
+#[tokio::test]
+async fn movie_flat_library_background_refresh_keeps_sibling_loose_file_of_a_changed_file() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let root = tempdir.path();
+    // Two qualities of the same movie sit loose in the flat library root.
+    let file_a = root.join("Flat Duo.2026.1080p.WEB-DL.mkv");
+    let file_b = root.join("Flat Duo.2026.2160p.WEB-DL.mkv");
+    std::fs::write(&file_a, b"first quality").expect("write loose file A");
+    std::fs::write(&file_b, b"second quality payload").expect("write loose file B");
+
+    let settings = Arc::new(StoredSettingsRepo::default());
+    settings
+        .set_value(
+            SETTINGS_SCOPE_MEDIA,
+            "movies.path",
+            root.to_string_lossy().as_ref(),
+        )
+        .await;
+    let unmatched_items = Arc::new(TrackingLibraryScanUnmatchedItemRepo::default());
+    let (base_app, user, titles) = bootstrap_with_scan_unmatched_and_metadata_tracking_and_titles(
+        settings,
+        Arc::new(MutableLibraryScanner::default()),
+        unmatched_items.clone(),
+        Arc::new(HydratingMovieSearchGateway {
+            search_item: MetadataSearchItem {
+                tvdb_id: "889900".to_string(),
+                smg_id: None,
+                primary_source: None,
+                external_ids: vec![],
+                name: "Flat Duo".to_string(),
+                year: Some(2026),
+                auto_match_safe: true,
+                auto_match_signals: vec!["exact_title".into()],
+            },
+            movie: make_movie_metadata(889900, "Flat Duo"),
+        }),
+    );
+    base_app
+        .reconcile_default_library_roots()
+        .await
+        .expect("reconcile default movie root");
+    let library = base_app
+        .services
+        .catalog
+        .libraries
+        .default_for_facet(MediaFacet::Movie)
+        .await
+        .expect("movie library lookup")
+        .expect("movie library exists");
+    base_app
+        .update_library_settings(
+            &user,
+            &library.id,
+            LibrarySettingsOverrideDraft {
+                movie_root_layout: Some(MovieRootLayout::Flat),
+                ..empty_library_settings_override()
+            },
+        )
+        .await
+        .expect("flat layout override should save");
+
+    let app = base_app.with_test_overrides(|builder| {
+        builder.with_media_analyzer(Arc::new(CountingValidMediaAnalyzer::default()))
+    });
+
+    // Full scan: both loose files dedup into one folderless title.
+    let summary = app
+        .scan_library(&user, MediaFacet::Movie)
+        .await
+        .expect("flat full movie scan");
+    assert_eq!(summary.scanned, 2);
+    assert_eq!(summary.unmatched, 0);
+    // Both candidates must land on the title (one creates it, the second
+    // quality matches it); the per-file attachments count as imports too.
+    assert!(
+        summary.matched + summary.imported >= 2,
+        "both loose files must resolve to the one title, got {summary:?}"
+    );
+
+    let stored_titles = titles.store.lock().await.clone();
+    assert_eq!(
+        stored_titles.len(),
+        1,
+        "both loose files must dedup into one title"
+    );
+    let title = stored_titles[0].clone();
+    assert_eq!(title.name, "Flat Duo");
+    assert!(
+        title
+            .folder_path
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty(),
+        "a flat-layout title must stay folderless, got {:?}",
+        title.folder_path
+    );
+
+    let path_a = file_a.to_string_lossy().to_string();
+    let path_b = file_b.to_string_lossy().to_string();
+    let attached_paths = |files: &[crate::TitleMediaFile]| -> Vec<String> {
+        files.iter().map(|file| file.file_path.clone()).collect()
+    };
+    let files = app
+        .services
+        .library
+        .media_files
+        .list_media_files_for_title(&title.id)
+        .await
+        .expect("list media files after full scan");
+    let attached = attached_paths(&files);
+    assert!(
+        attached.contains(&path_a) && attached.contains(&path_b),
+        "one full scan must attach both loose files to the one title, got {attached:?}"
+    );
+
+    // Make the title probe-eligible for the background refresh.
+    {
+        let mut store = titles.store.lock().await;
+        let stored = store
+            .iter_mut()
+            .find(|candidate| candidate.id == title.id)
+            .expect("stored title");
+        stored.metadata_fetched_at = Some(Utc::now());
+        stored.metadata_language = Some("eng".to_string());
+    }
+
+    // Change file A in place (fresh mtime and a different size) so its probe
+    // signature moves and the refresh re-probes the title.
+    std::fs::write(&file_a, b"first quality remuxed").expect("rewrite loose file A");
+
+    let refresh = app
+        .background_library_refresh_with_tracking(
+            &user,
+            MediaFacet::Movie,
+            "flat-sibling-loose-refresh",
+        )
+        .await
+        .expect("flat background movie refresh");
+    assert_eq!(refresh.unmatched, 0);
+
+    // File B's record survives the refresh: no detach, no churn, no rows.
+    let files = app
+        .services
+        .library
+        .media_files
+        .list_media_files_for_title(&title.id)
+        .await
+        .expect("list media files after refresh");
+    let attached = attached_paths(&files);
+    assert!(
+        attached.contains(&path_a) && attached.contains(&path_b),
+        "both loose files must stay attached after the refresh, got {attached:?}"
+    );
+    let refreshed_title = app
+        .services
+        .catalog
+        .titles
+        .get_by_id(&title.id)
+        .await
+        .expect("load refreshed title")
+        .expect("title still exists");
+    assert!(
+        refreshed_title
+            .folder_path
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty(),
+        "the flat title must keep folder_path = None, got {:?}",
+        refreshed_title.folder_path
+    );
+    assert!(
+        unmatched_items.items().await.is_empty(),
+        "the refresh must not leave an unmatched row for the sibling file"
+    );
+}
+
+/// Folders-mode control: with the layout toggle absent (the default), loose
+/// root files are still invisible to the movie scan — only subfolders are
+/// candidates — so the default behavior is unchanged by the toggle.
+#[tokio::test]
+async fn movie_folders_layout_full_scan_ignores_loose_root_files() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let root = tempdir.path();
+    let loose_file = root.join("Loose Movie.2026.1080p.WEB-DL.mkv");
+    std::fs::write(&loose_file, b"loose media bytes").expect("write loose root file");
+    let movie_folder = root.join("Folder Movie (2025)");
+    std::fs::create_dir(&movie_folder).expect("create movie folder");
+    let folder_file = movie_folder.join("Folder.Movie.2025.1080p.WEB-DL.mkv");
+    std::fs::write(&folder_file, b"folder media bytes").expect("write folder file");
+
+    let (app, user, unmatched_items) =
+        bootstrap_movie_scan_app(root, Vec::new(), Arc::new(EmptySearchMetadataGateway)).await;
+
+    let summary = app
+        .scan_library(&user, MediaFacet::Movie)
+        .await
+        .expect("folders-mode full movie scan");
+    assert_eq!(
+        summary.scanned, 1,
+        "only the subfolder is a candidate in folders mode"
+    );
+    assert_eq!(summary.unmatched, 1);
+
+    let items = unmatched_items.items().await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        items[0].item_path,
+        movie_folder.to_string_lossy(),
+        "the unmatched row must be the subfolder, never the loose file"
+    );
+}
+
 #[tokio::test]
 async fn cancel_full_library_scan_with_in_flight_title_walk_drains_executor_permits() {
     let tempdir = tempfile::tempdir().expect("tempdir");

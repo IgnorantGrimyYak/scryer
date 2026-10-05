@@ -368,6 +368,11 @@ const it: LocaleDictionary = {
     "Questa cartella radice è già usata da {{libraries}}.",
   "settings.rootFolderSetDefault": "Imposta come predefinita",
   "settings.libraryScanTitle": "Scansione libreria",
+  "settings.libraryMovieLayoutLabel": "Layout dei media",
+  "settings.libraryMovieLayoutFolders":
+    "Sottocartelle (una cartella per titolo)",
+  "settings.libraryMovieLayoutFlat":
+    "File in piano (media direttamente nella radice della biblioteca)",
   "settings.libraryScanButton": "Scansiona libreria",
   "settings.libraryScanRunning": "Scansione libreria…",
   "settings.libraryScanSummary":
@@ -990,6 +995,8 @@ const it: LocaleDictionary = {
     "{{name}} ha perso {{folder}} e ora è senza corrispondenza. Riparalo in Importazioni in sospeso, dove compare con il motivo «Proprietà della cartella modificata dall'utente».",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "Proprietà della cartella modificata dall'utente",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Questo file corrisponde a un titolo a cui è già assegnata una cartella. Spostalo in quella cartella o riporta questa biblioteca alle sottocartelle.",
   "pendingImports.folderOwnershipChangedHelp":
     "Questa cartella è stata assegnata a un altro titolo, quindi questo titolo non ne ha più una. Apri il titolo e usa Cambia cartella per assegnargli quella giusta, oppure usa Ignora per nascondere questo elemento.",
   "pendingImports.title": "Importazioni in sospeso",

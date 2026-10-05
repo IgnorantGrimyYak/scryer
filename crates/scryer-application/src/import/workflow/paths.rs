@@ -496,6 +496,10 @@ pub(crate) struct ImportPathSettings {
     pub(crate) folder_template: String,
     pub(crate) season_folder_template: String,
     pub(crate) specials_folder_template: String,
+    /// Root layout of the title's movie library (`Folders` for series/anime
+    /// and for movie libraries that never set the toggle). Flat movie
+    /// libraries resolve folderless titles to the media root.
+    pub(crate) movie_root_layout: MovieRootLayout,
 }
 async fn ensure_import_title_folder_available(
     app: &AppUseCase,

@@ -2,10 +2,10 @@ use super::*;
 use crate::library_scan_titles::find_existing_movie_title_index_for_metadata_match;
 use crate::library_scan_titles::find_existing_series_title_index_for_metadata_match;
 use crate::library_scan_unmatched::{
-    IgnoredLibraryScanItemArgs, LIBRARY_SCAN_SKIPPED_UNUSABLE_TITLE_EVIDENCE,
-    LIBRARY_SCAN_TITLE_ALREADY_OWNS_ANOTHER_FOLDER, build_title_bound_unmatched_scan_item,
-    persist_ignored_library_scan_item, persist_library_scan_unmatched_item,
-    series_unmatched_display_name,
+    IgnoredLibraryScanItemArgs, LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE,
+    LIBRARY_SCAN_SKIPPED_UNUSABLE_TITLE_EVIDENCE, LIBRARY_SCAN_TITLE_ALREADY_OWNS_ANOTHER_FOLDER,
+    build_title_bound_unmatched_scan_item, persist_ignored_library_scan_item,
+    persist_library_scan_unmatched_item, series_unmatched_display_name,
 };
 use crate::stored_paths::{path_to_stored_string, stored_path_to_path_buf};
 use scryer_domain::Library;
@@ -240,6 +240,54 @@ fn scanned_movie_entry_folder_path(
     } else {
         Some(parent)
     }
+}
+
+/// A candidate whose top-level entry is a loose root file (the flat movie
+/// library layout): the entry path is the file itself, so no folder exists
+/// under the scan root. Folder-shaped entries — including empty folders —
+/// always resolve to a folder and are never loose.
+fn candidate_is_loose_root_file(
+    scan_root: &Path,
+    candidate: &PreparedMovieLibraryScanCandidate,
+) -> bool {
+    scanned_movie_entry_folder_path(
+        scan_root,
+        candidate.file.path.as_str(),
+        candidate.representative_is_directory,
+    )
+    .is_none()
+}
+
+/// Work files for a full-scan movie candidate. A loose root file is carried
+/// outside `candidate.discovered_files` (in the candidate's inline inventory),
+/// so scope the work to the file itself: an empty work scope is upgraded to a
+/// full-folder claim downstream, and a second loose file of the same title
+/// would be deduplicated away as if its file were already covered.
+fn movie_full_scan_work_files(
+    scan_root: &Path,
+    candidate: &PreparedMovieLibraryScanCandidate,
+) -> Vec<LibraryFile> {
+    if candidate_is_loose_root_file(scan_root, candidate) {
+        vec![candidate.file.clone()]
+    } else {
+        candidate.discovered_files.clone()
+    }
+}
+
+/// Cross-layout guard for the movie root-layout toggle: a loose root file
+/// must never bind to a title that already owns a folder (a frozen
+/// folders-layout title). The rule is shared by both layouts — in folders
+/// mode loose files are never discovered, so the guard stays inert — and a
+/// matching loose file stays stably unmatched with a dedicated reason
+/// instead, so one title never mixes loose and folder-owned files and the
+/// scan never churns bind/detach.
+fn loose_file_matches_folder_owned_title(
+    scan_root: &Path,
+    candidate: &PreparedMovieLibraryScanCandidate,
+    title: &Title,
+) -> bool {
+    candidate_is_loose_root_file(scan_root, candidate)
+        && normalize_title_folder_path(title.folder_path.clone()).is_some()
 }
 
 async fn sync_movie_title_folder_path_for_scan(
@@ -535,13 +583,22 @@ async fn load_existing_title_for_media_file_path(
 
 enum MovieCandidateResolution {
     Ready(Box<Title>),
+    /// Cross-layout guard: a loose root file matched a title that owns a
+    /// folder; it stays stably unmatched with the dedicated reason.
+    LooseFileMatchesFolderOwnedTitle(Box<PreparedMovieLibraryScanCandidate>),
     Skipped,
     Unresolved(Box<PreparedMovieLibraryScanCandidate>),
 }
 
 enum MovieMetadataResolution {
     Ready(Title),
-    ReadyCreated { index: usize, title: Title },
+    ReadyCreated {
+        index: usize,
+        title: Title,
+    },
+    /// Cross-layout guard: a loose root file resolved to a title that owns a
+    /// folder; it stays stably unmatched with the dedicated reason.
+    LooseFileMatchesFolderOwnedTitle,
     CreateFailed(AppError),
     Unmatched,
 }
@@ -782,6 +839,7 @@ async fn append_series_title_and_merge_work(
 }
 
 async fn resolve_movie_scan_candidate(
+    scan_root: &Path,
     candidate: PreparedMovieLibraryScanCandidate,
     existing_titles: &mut [Title],
     existing_titles_by_name: &mut TitleNameIndex,
@@ -797,9 +855,13 @@ async fn resolve_movie_scan_candidate(
         existing_titles_by_imdb_id,
         existing_titles_by_tmdb_id,
     ) {
-        return Ok(MovieCandidateResolution::Ready(Box::new(
-            existing_titles[index].clone(),
-        )));
+        let title = existing_titles[index].clone();
+        if loose_file_matches_folder_owned_title(scan_root, &candidate, &title) {
+            return Ok(MovieCandidateResolution::LooseFileMatchesFolderOwnedTitle(
+                Box::new(candidate),
+            ));
+        }
+        return Ok(MovieCandidateResolution::Ready(Box::new(title)));
     }
 
     if !candidate.metadata_lookup_attempted {
@@ -828,6 +890,7 @@ async fn resolve_movie_metadata_match(
     existing_titles_by_imdb_id: &mut HashMap<String, usize>,
     existing_titles_by_tmdb_id: &mut HashMap<String, usize>,
 ) -> AppResult<MovieMetadataResolution> {
+    let scan_root = Path::new(library_path);
     let selected_metadata =
         select_movie_metadata_from_batch_results(candidate, batch_search_results)?;
     let Some(selected) = selected_metadata else {
@@ -843,9 +906,11 @@ async fn resolve_movie_metadata_match(
         existing_titles_by_imdb_id,
         existing_titles_by_tmdb_id,
     ) {
-        return Ok(MovieMetadataResolution::Ready(
-            existing_titles[index].clone(),
-        ));
+        let title = existing_titles[index].clone();
+        if loose_file_matches_folder_owned_title(scan_root, candidate, &title) {
+            return Ok(MovieMetadataResolution::LooseFileMatchesFolderOwnedTitle);
+        }
+        return Ok(MovieMetadataResolution::Ready(title));
     }
 
     match create_title_without_hydration_for_library_scan(
@@ -860,6 +925,11 @@ async fn resolve_movie_metadata_match(
         Ok(created) => {
             let was_created = !created.reused_existing;
             let created_title = created.title;
+            if !was_created
+                && loose_file_matches_folder_owned_title(scan_root, candidate, &created_title)
+            {
+                return Ok(MovieMetadataResolution::LooseFileMatchesFolderOwnedTitle);
+            }
             let index = append_movie_title(
                 existing_titles,
                 existing_titles_by_name,
@@ -905,11 +975,11 @@ pub(super) async fn process_movie_full_scan_candidate(
     summary: &mut LibraryScanSummary,
     _unmatched_items: &mut Vec<LibraryScanUnmatchedItem>,
 ) -> AppResult<Option<PreparedMovieLibraryScanCandidate>> {
-    let discovered_files = candidate.discovered_files.clone();
+    let scan_root = Path::new(library_path);
+    let discovered_files = movie_full_scan_work_files(scan_root, &candidate);
     let item_path = normalize_library_scan_item_path(&candidate.file.path);
     let representative_path = candidate.file.path.clone();
     let representative_is_directory = candidate.representative_is_directory;
-    let scan_root = Path::new(library_path);
 
     if let Some(mut title) =
         load_existing_title_for_media_file_path(app, &candidate.file.path).await?
@@ -1036,6 +1106,7 @@ pub(super) async fn process_movie_full_scan_candidate(
 
     let pending_candidate = candidate.clone();
     match resolve_movie_scan_candidate(
+        scan_root,
         candidate,
         existing_titles,
         existing_titles_by_name,
@@ -1088,6 +1159,23 @@ pub(super) async fn process_movie_full_scan_candidate(
                 summary.matched += 1;
             }
             clear_library_scan_unmatched_item(app, facet, library_id, &item_path).await?;
+            coordinator.mark_title_match_completed(1).await;
+            Ok(None)
+        }
+        MovieCandidateResolution::LooseFileMatchesFolderOwnedTitle(guarded) => {
+            let item = build_movie_unmatched_scan_item(
+                facet,
+                library_id,
+                session_id,
+                library_path,
+                &guarded,
+                &MetadataSearchResults::new(),
+                Some(LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE),
+                None,
+            );
+            persist_library_scan_unmatched_item(app, &item).await?;
+            _unmatched_items.push(item);
+            summary.unmatched += 1;
             coordinator.mark_title_match_completed(1).await;
             Ok(None)
         }
@@ -1292,8 +1380,8 @@ pub(super) async fn process_resolved_movie_full_scan_candidate(
     summary: &mut LibraryScanSummary,
     unmatched_items: &mut Vec<LibraryScanUnmatchedItem>,
 ) -> AppResult<()> {
-    let discovered_files = candidate.discovered_files.clone();
     let scan_root = Path::new(library_path);
+    let discovered_files = movie_full_scan_work_files(scan_root, &candidate);
     match resolve_movie_metadata_match(
         app,
         actor,
@@ -1353,6 +1441,23 @@ pub(super) async fn process_resolved_movie_full_scan_candidate(
                 summary.matched += 1;
             }
             clear_library_scan_unmatched_item(app, facet, library_id, &candidate.file.path).await?;
+            coordinator.mark_title_match_completed(1).await;
+            Ok(())
+        }
+        MovieMetadataResolution::LooseFileMatchesFolderOwnedTitle => {
+            let item = build_movie_unmatched_scan_item(
+                facet,
+                library_id,
+                session_id,
+                library_path,
+                &candidate,
+                batch_search_results,
+                Some(LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE),
+                None,
+            );
+            persist_library_scan_unmatched_item(app, &item).await?;
+            unmatched_items.push(item);
+            summary.unmatched += 1;
             coordinator.mark_title_match_completed(1).await;
             Ok(())
         }
@@ -1881,6 +1986,7 @@ pub(super) async fn process_movie_refresh_candidate(
     let pending_candidate = candidate.clone();
 
     match resolve_movie_scan_candidate(
+        root,
         candidate,
         existing_titles,
         existing_titles_by_name,
@@ -1943,6 +2049,12 @@ pub(super) async fn process_movie_refresh_candidate(
             if queued {
                 summary.matched += 1;
             }
+            Ok(None)
+        }
+        MovieCandidateResolution::LooseFileMatchesFolderOwnedTitle(_) => {
+            // Refresh counts only: the unmatched row is surfaced by the full
+            // scan, mirroring every other refresh unmatched arm.
+            summary.unmatched += 1;
             Ok(None)
         }
         MovieCandidateResolution::Skipped => Ok(None),
@@ -2044,6 +2156,12 @@ pub(super) async fn process_resolved_movie_refresh_candidate(
             if queued {
                 summary.matched += 1;
             }
+            Ok(())
+        }
+        MovieMetadataResolution::LooseFileMatchesFolderOwnedTitle => {
+            // Refresh counts only: the unmatched row is surfaced by the full
+            // scan, mirroring every other refresh unmatched arm.
+            summary.unmatched += 1;
             Ok(())
         }
         MovieMetadataResolution::ReadyCreated { index, mut title } => {
@@ -2409,6 +2527,28 @@ mod tests {
             year_hint,
             year_hint_variants: vec![year_hint],
             query_variants: vec![query.to_string()],
+            search_candidates: Vec::new(),
+            metadata_lookup_attempted: true,
+        }
+    }
+
+    /// A flat-layout candidate: the media file sits directly in the library
+    /// root instead of in its own subfolder.
+    fn loose_movie_candidate(
+        name: &str,
+        year_hint: Option<u32>,
+    ) -> PreparedMovieLibraryScanCandidate {
+        PreparedMovieLibraryScanCandidate {
+            file: build_library_file(&format!("/library/{name}.mkv")),
+            representative_is_directory: false,
+            discovered_files: Vec::new(),
+            parsed_release: crate::ParsedReleaseMetadata::default(),
+            nfo_meta: None,
+            identity_hint: None,
+            query: name.to_string(),
+            year_hint,
+            year_hint_variants: vec![year_hint],
+            query_variants: vec![name.to_string()],
             search_candidates: Vec::new(),
             metadata_lookup_attempted: true,
         }
@@ -2895,5 +3035,483 @@ mod tests {
 
         assert_eq!(scanner.call_count(), 1);
         assert_eq!(result.files.len(), 1);
+    }
+
+    #[test]
+    fn loose_root_file_detection_covers_only_flat_entries() {
+        let scan_root = Path::new("/library");
+
+        assert!(
+            candidate_is_loose_root_file(
+                scan_root,
+                &loose_movie_candidate("Frozen Film", Some(2020))
+            ),
+            "a file directly under the root is loose"
+        );
+        assert!(
+            !candidate_is_loose_root_file(scan_root, &movie_candidate("Frozen Film", Some(2020))),
+            "a file inside a subfolder is not loose"
+        );
+
+        let mut empty_folder = movie_candidate("Frozen Film", Some(2020));
+        empty_folder.file = build_library_file("/library/Frozen Film");
+        empty_folder.representative_is_directory = true;
+        assert!(
+            !candidate_is_loose_root_file(scan_root, &empty_folder),
+            "an empty folder entry is folder-shaped, not loose"
+        );
+    }
+
+    #[tokio::test]
+    async fn loose_file_matching_folder_owned_title_is_guarded_on_every_movie_bind_path() {
+        let scan_root = Path::new("/library");
+
+        // Name bind path: a loose root file resolving to a frozen folders-layout title.
+        let mut folder_owned = build_movie_title_named("frozen-2020", "Frozen Film", Some(2020));
+        folder_owned.folder_path = Some("/library/Frozen Film".to_string());
+        let mut titles = vec![folder_owned.clone()];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&titles);
+        assert!(matches!(
+            resolve_movie_scan_candidate(
+                scan_root,
+                loose_movie_candidate("Frozen Film", Some(2020)),
+                &mut titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+            )
+            .await,
+            Ok(MovieCandidateResolution::LooseFileMatchesFolderOwnedTitle(
+                _
+            ))
+        ));
+
+        // ID bind path: a loose root file whose NFO tmdb id points at a
+        // folder-owned title is guarded just like a name match.
+        let mut id_owned = build_movie_title_named("id-film-2020", "Id Film", Some(2020));
+        id_owned.folder_path = Some("/library/Id Film".to_string());
+        id_owned.external_ids = vec![scryer_domain::ExternalId::new(
+            "tmdb".to_string(),
+            "55555".to_string(),
+        )];
+        let mut titles = vec![id_owned];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&titles);
+        let mut id_candidate = loose_movie_candidate("Id Film", Some(2020));
+        id_candidate.nfo_meta = Some(crate::nfo::NfoMetadata {
+            tmdb_id: Some("55555".to_string()),
+            ..Default::default()
+        });
+        assert!(matches!(
+            resolve_movie_scan_candidate(
+                scan_root,
+                id_candidate,
+                &mut titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+            )
+            .await,
+            Ok(MovieCandidateResolution::LooseFileMatchesFolderOwnedTitle(
+                _
+            ))
+        ));
+
+        // Controls stay unguarded: a loose file may bind to a folderless
+        // title, a folder-shaped candidate may bind to its own title, and a
+        // loose file with no match stays unresolved for the metadata path.
+        let folderless = build_movie_title_named("loose-2020", "Loose Film", Some(2020));
+        let mut titles = vec![folderless];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&titles);
+        assert!(matches!(
+            resolve_movie_scan_candidate(
+                scan_root,
+                loose_movie_candidate("Loose Film", Some(2020)),
+                &mut titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+            )
+            .await,
+            Ok(MovieCandidateResolution::Ready(_))
+        ));
+
+        let mut titles = vec![folder_owned.clone()];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&titles);
+        assert!(matches!(
+            resolve_movie_scan_candidate(
+                scan_root,
+                movie_candidate("Frozen Film", Some(2020)),
+                &mut titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+            )
+            .await,
+            Ok(MovieCandidateResolution::Ready(_))
+        ));
+
+        let mut titles: Vec<Title> = Vec::new();
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&titles);
+        assert!(matches!(
+            resolve_movie_scan_candidate(
+                scan_root,
+                loose_movie_candidate("Unknown Film", Some(2020)),
+                &mut titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+            )
+            .await,
+            Ok(MovieCandidateResolution::Unresolved(_))
+        ));
+    }
+
+    async fn run_full_scan_guard_case(
+        app: &AppUseCase,
+        actor: &User,
+        title: Title,
+        candidate: PreparedMovieLibraryScanCandidate,
+    ) -> (
+        LibraryScanSummary,
+        Vec<LibraryScanUnmatchedItem>,
+        Vec<LibraryScanTitleWork>,
+        Title,
+    ) {
+        let library_id = title.library_id.clone();
+        let coordinator =
+            LibraryScanCoordinator::new(app.clone(), "guard-test-session".to_string());
+        let mut executor = CapturingTitleWorkQueue::default();
+        let mut existing_titles = vec![title.clone()];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&existing_titles);
+        let mut summary = LibraryScanSummary::default();
+        let mut unmatched_items: Vec<LibraryScanUnmatchedItem> = Vec::new();
+
+        process_movie_full_scan_candidate(
+            app,
+            None,
+            actor,
+            &MediaFacet::Movie,
+            &library_id,
+            "/library",
+            "guard-test-session",
+            &coordinator,
+            candidate,
+            &mut executor,
+            &mut existing_titles,
+            &mut by_name,
+            &mut by_tvdb,
+            &mut by_imdb,
+            &mut by_tmdb,
+            &mut summary,
+            &mut unmatched_items,
+        )
+        .await
+        .expect("candidate processing");
+
+        (
+            summary,
+            unmatched_items,
+            executor.queued,
+            existing_titles.pop().expect("title"),
+        )
+    }
+
+    #[tokio::test]
+    async fn full_scan_keeps_loose_file_matching_folder_owned_title_stably_unmatched() {
+        let (app, user) = crate::lib_tests::bootstrap_with_scan_unmatched_items();
+
+        let mut folder_owned = build_movie_title_named("frozen-2020", "Frozen Film", Some(2020));
+        folder_owned.folder_path = Some("/library/Frozen Film".to_string());
+        let candidate = loose_movie_candidate("Frozen Film", Some(2020));
+
+        let (first_summary, first_items, first_work, first_title) =
+            run_full_scan_guard_case(&app, &user, folder_owned.clone(), candidate.clone()).await;
+        assert_eq!(first_summary.unmatched, 1);
+        assert_eq!(first_items.len(), 1);
+        assert_eq!(
+            first_items[0].reason_code,
+            LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE
+        );
+        assert_eq!(first_items[0].item_path, "/library/Frozen Film.mkv");
+        assert!(
+            first_items[0].title_id.is_none(),
+            "the guard binds no title"
+        );
+        assert!(first_work.is_empty(), "the guard queues no title work");
+        assert_eq!(first_title, folder_owned, "the frozen title is untouched");
+
+        // A second scan over the same state churns nothing: the same single
+        // guarded row for the same path, the same untouched title.
+        let (second_summary, second_items, second_work, second_title) =
+            run_full_scan_guard_case(&app, &user, folder_owned.clone(), candidate).await;
+        assert_eq!(second_summary.unmatched, 1);
+        assert_eq!(second_items.len(), 1);
+        assert_eq!(second_items[0].reason_code, first_items[0].reason_code);
+        assert_eq!(second_items[0].item_path, first_items[0].item_path);
+        assert!(second_work.is_empty());
+        assert_eq!(second_title, folder_owned);
+    }
+
+    #[tokio::test]
+    async fn full_scan_coalesces_two_loose_files_of_the_same_folderless_title() {
+        let (app, user) = crate::lib_tests::bootstrap_with_scan_unmatched_items();
+
+        // Two qualities of one movie sit loose in the root of a library whose
+        // title already exists without a folder: both files must land on the
+        // one title, never on two titles or two mixed folders.
+        let folderless = build_movie_title_named("frozen-2020", "Frozen Film", Some(2020));
+        assert!(folderless.folder_path.is_none());
+
+        let build_candidate = |file: LibraryFile| PreparedMovieLibraryScanCandidate {
+            file,
+            representative_is_directory: false,
+            discovered_files: Vec::new(),
+            parsed_release: crate::ParsedReleaseMetadata::default(),
+            nfo_meta: None,
+            identity_hint: None,
+            query: "Frozen Film".to_string(),
+            year_hint: Some(2020),
+            year_hint_variants: vec![Some(2020)],
+            query_variants: vec!["Frozen Film".to_string()],
+            search_candidates: Vec::new(),
+            metadata_lookup_attempted: true,
+        };
+
+        let coordinator = LibraryScanCoordinator::new(app.clone(), "dedup-session".to_string());
+        let mut executor = CapturingTitleWorkQueue::default();
+        let mut existing_titles = vec![folderless.clone()];
+        let (mut by_name, _by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&existing_titles);
+        let mut summary = LibraryScanSummary::default();
+        let mut unmatched_items: Vec<LibraryScanUnmatchedItem> = Vec::new();
+
+        for file in [
+            build_library_file("/library/Frozen.Film.2020.1080p.mkv"),
+            build_library_file("/library/Frozen.Film.2020.2160p.mkv"),
+        ] {
+            let resolved = process_movie_full_scan_candidate(
+                &app,
+                None,
+                &user,
+                &MediaFacet::Movie,
+                &folderless.library_id,
+                "/library",
+                "dedup-session",
+                &coordinator,
+                build_candidate(file),
+                &mut executor,
+                &mut existing_titles,
+                &mut by_name,
+                &mut by_tvdb,
+                &mut by_imdb,
+                &mut by_tmdb,
+                &mut summary,
+                &mut unmatched_items,
+            )
+            .await
+            .expect("candidate processing");
+            assert!(
+                resolved.is_none(),
+                "a folderless title matches on every run, got pending candidate"
+            );
+        }
+
+        assert_eq!(
+            existing_titles.len(),
+            1,
+            "one title, not one per loose file"
+        );
+        assert_eq!(summary.matched, 2);
+        assert!(unmatched_items.is_empty());
+        assert_eq!(executor.queued.len(), 2, "one work per loose file");
+
+        // Every work targets the one title with folder-free cleanup, so the
+        // work merge coalesces both files into a single folderless walk.
+        let mut file_paths: Vec<String> = Vec::new();
+        for work in &executor.queued {
+            assert_eq!(work.title.id, folderless.id);
+            match &work.facet_plan {
+                LibraryScanTitleFacetPlan::Movie(cleanup) => {
+                    assert!(cleanup.canonical_folder_path.is_none());
+                    assert!(cleanup.scan_folder_path.is_none());
+                }
+                other => panic!("movie work expected, got {other:?}"),
+            }
+            match &work.scope {
+                LibraryScanTitleWorkScope::ScopedFiles(files) => {
+                    assert_eq!(files.len(), 1);
+                    file_paths.push(files[0].path.clone());
+                }
+                other => panic!("loose file work must be file-scoped, got {other:?}"),
+            }
+        }
+        assert_eq!(
+            file_paths,
+            vec![
+                "/library/Frozen.Film.2020.1080p.mkv".to_string(),
+                "/library/Frozen.Film.2020.2160p.mkv".to_string(),
+            ]
+        );
+    }
+
+    async fn run_resolved_full_scan_guard_case(
+        app: &AppUseCase,
+        actor: &User,
+        mut existing_titles: Vec<Title>,
+        candidate: PreparedMovieLibraryScanCandidate,
+        batch_search_results: MetadataSearchResults,
+    ) -> (
+        LibraryScanSummary,
+        Vec<LibraryScanUnmatchedItem>,
+        Vec<LibraryScanTitleWork>,
+        Vec<Title>,
+    ) {
+        let library_id = existing_titles[0].library_id.clone();
+        let coordinator =
+            LibraryScanCoordinator::new(app.clone(), "resolved-guard-session".to_string());
+        let mut executor = CapturingTitleWorkQueue::default();
+        let (mut by_name, mut by_smg, mut by_tvdb, mut by_imdb, mut by_tmdb) =
+            build_movie_title_indexes(&existing_titles);
+        let mut summary = LibraryScanSummary::default();
+        let mut unmatched_items: Vec<LibraryScanUnmatchedItem> = Vec::new();
+
+        process_resolved_movie_full_scan_candidate(
+            app,
+            None,
+            actor,
+            &MediaFacet::Movie,
+            &library_id,
+            "/library",
+            "resolved-guard-session",
+            &coordinator,
+            candidate,
+            &batch_search_results,
+            &mut executor,
+            &mut existing_titles,
+            &mut by_name,
+            &mut by_smg,
+            &mut by_tvdb,
+            &mut by_imdb,
+            &mut by_tmdb,
+            &mut summary,
+            &mut unmatched_items,
+        )
+        .await
+        .expect("resolved candidate processing");
+
+        (summary, unmatched_items, executor.queued, existing_titles)
+    }
+
+    fn safe_batch_result(
+        query: &str,
+        smg_id: i64,
+    ) -> (MetadataSearchResults, PreparedMovieLibraryScanCandidate) {
+        let mut candidate = loose_movie_candidate(query, None);
+        candidate.search_candidates = vec![query.to_string()];
+        candidate.year_hint_variants = vec![None];
+
+        let key = crate::library_scan_metadata::BatchMetadataSearchKey::new(
+            crate::library_scan_metadata::METADATA_TYPE_MOVIE,
+            query,
+            None,
+            None,
+        )
+        .expect("valid batch search key");
+        let item = crate::MetadataSearchItem {
+            name: query.to_string(),
+            tvdb_id: String::new(),
+            smg_id: Some(smg_id),
+            primary_source: None,
+            external_ids: Vec::new(),
+            year: Some(2020),
+            auto_match_safe: true,
+            auto_match_signals: vec!["external_id:smg".to_string()],
+        };
+        let mut batch_search_results = MetadataSearchResults::new();
+        batch_search_results.insert(key, Arc::new(vec![item]));
+        (batch_search_results, candidate)
+    }
+
+    #[tokio::test]
+    async fn resolved_full_scan_keeps_loose_file_resolving_to_folder_owned_title_guarded() {
+        let (app, user) = crate::lib_tests::bootstrap_with_scan_unmatched_items();
+
+        // The metadata path: the gateway match (smg id) points at a title that
+        // already owns a folder, so the loose file must not bind or create.
+        let mut folder_owned = build_movie_title_named("frozen-2020", "Frozen Film", Some(2020));
+        folder_owned.folder_path = Some("/library/Frozen Film".to_string());
+        folder_owned.external_ids = vec![scryer_domain::ExternalId::new(
+            "smg".to_string(),
+            "1234".to_string(),
+        )];
+        let (batch_search_results, candidate) = safe_batch_result("Frozen Film", 1234);
+
+        let (summary, items, work, titles) = run_resolved_full_scan_guard_case(
+            &app,
+            &user,
+            vec![folder_owned.clone()],
+            candidate,
+            batch_search_results,
+        )
+        .await;
+
+        assert_eq!(summary.unmatched, 1);
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].reason_code,
+            LIBRARY_SCAN_LOOSE_FILE_MATCHES_FOLDER_OWNED_TITLE
+        );
+        assert_eq!(items[0].item_path, "/library/Frozen Film.mkv");
+        assert!(work.is_empty());
+        assert_eq!(titles.len(), 1, "no title is created");
+        assert_eq!(titles[0], folder_owned, "the frozen title is untouched");
+    }
+
+    #[tokio::test]
+    async fn resolved_full_scan_keeps_the_usual_reason_for_a_loose_file_matching_nothing() {
+        let (app, user) = crate::lib_tests::bootstrap_with_scan_unmatched_items();
+
+        // The guard must not steal the reason code of a genuinely unmatched
+        // loose file: zero search results keep the usual computed reason.
+        let (mut batch_search_results, candidate) = safe_batch_result("Unknown Film", 9999);
+        batch_search_results.clear();
+        let key = crate::library_scan_metadata::BatchMetadataSearchKey::new(
+            crate::library_scan_metadata::METADATA_TYPE_MOVIE,
+            "Unknown Film",
+            None,
+            None,
+        )
+        .expect("valid batch search key");
+        batch_search_results.insert(key, Arc::new(Vec::new()));
+
+        let (summary, items, work, titles) = run_resolved_full_scan_guard_case(
+            &app,
+            &user,
+            vec![build_movie_title_named(
+                "other-2020",
+                "Other Film",
+                Some(2020),
+            )],
+            candidate,
+            batch_search_results,
+        )
+        .await;
+
+        assert_eq!(summary.unmatched, 1);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].reason_code, "no_metadata_search_results");
+        assert!(work.is_empty());
+        assert_eq!(titles.len(), 1);
     }
 }

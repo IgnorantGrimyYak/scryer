@@ -14,7 +14,7 @@ use scryer_application::{
     MAINTENANCE_GATE_RESULT_DISPLAY_KEY, MAINTENANCE_GATE_REVERSIBLE_EFFECTS_KEY,
     METADATA_LANGUAGE_KEY, MFA_REQUIRE_CONFIG_STEP_UP_KEY, MFA_REQUIRE_PASSWORD_LOGIN_KEY,
     MINIMUM_SEEDERS_FLOOR_DEFAULT_JSON, MINIMUM_SEEDERS_FLOOR_SETTING_KEY, MOVIES_ROOT_FOLDERS_KEY,
-    NZBGET_OLDER_PRIORITY_SETTING_KEY, NZBGET_RECENT_PRIORITY_SETTING_KEY, PASSWORD_MIN_LENGTH_KEY,
+    MOVIE_LIBRARY_LAYOUT_KEY, NZBGET_OLDER_PRIORITY_SETTING_KEY, NZBGET_RECENT_PRIORITY_SETTING_KEY, PASSWORD_MIN_LENGTH_KEY,
     POST_PROCESSING_SCRIPT_ANIME_KEY, POST_PROCESSING_SCRIPT_MOVIE_KEY,
     POST_PROCESSING_SCRIPT_SERIES_KEY, POST_PROCESSING_TIMEOUT_KEY, QUALITY_PROFILE_CATALOG_KEY,
     QUALITY_PROFILE_ID_KEY, QUALITY_PROFILE_INHERIT_VALUE, QualityProfile,
@@ -753,6 +753,17 @@ pub(crate) fn service_setting_seeds() -> &'static [ServiceSettingSeed] {
             key_name: INDEXER_ROUTING_SETTINGS_KEY,
             data_type: "string",
             default_value_json: "{}",
+            is_sensitive: false,
+        },
+        // Per-movie-library root layout (scope_id = library id); absent rows
+        // read as the folders default, so the stored default never changes
+        // a library's layout.
+        ServiceSettingSeed {
+            category: SETTINGS_CATEGORY_MEDIA,
+            scope: SETTINGS_SCOPE_SYSTEM,
+            key_name: MOVIE_LIBRARY_LAYOUT_KEY,
+            data_type: "string",
+            default_value_json: "\"folders\"",
             is_sensitive: false,
         },
         ServiceSettingSeed {
@@ -2868,6 +2879,16 @@ mod tests {
                 && seed.key_name == TITLE_METADATA_LANGUAGE_OVERRIDE_KEY
                 && seed.data_type == "string"
                 && seed.default_value_json == "null"
+        }));
+    }
+
+    #[test]
+    fn service_setting_seeds_include_movie_library_layout() {
+        assert!(service_setting_seeds().iter().any(|seed| {
+            seed.scope == SETTINGS_SCOPE_SYSTEM
+                && seed.key_name == MOVIE_LIBRARY_LAYOUT_KEY
+                && seed.data_type == "string"
+                && seed.default_value_json == "\"folders\""
         }));
     }
 

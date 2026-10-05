@@ -9520,6 +9520,10 @@ input LibrarySettingsInput {
 	Download-client routing rules for this library.
 	"""
 	downloadClientRouting: [DownloadClientRoutingEntryInput!]
+	"""
+	Movie root layout; null keeps the folders default. Movie libraries only.
+	"""
+	movieRootLayout: MovieRootLayoutValue
 }
 
 """
@@ -9682,6 +9686,14 @@ type LibrarySettingsPayload {
 	Library override download-client routing entries; null means inherit.
 	"""
 	downloadClientRoutingOverride: [DownloadClientRoutingEntryPayload!]
+	"""
+	Library override for the movie root layout; null keeps the folders default.
+	"""
+	movieRootLayoutOverride: MovieRootLayoutValue
+	"""
+	Effective movie root layout (folders default when no override).
+	"""
+	movieRootLayout: MovieRootLayoutValue!
 }
 
 """
@@ -17340,6 +17352,20 @@ type MovieEntityPayload {
 	Cast and crew cached during the movie's latest metadata hydration.
 	"""
 	credits: [TitleCreditPayload!]!
+}
+
+"""
+How a movie library arranges media under the library root.
+"""
+enum MovieRootLayoutValue {
+	"""
+	One subfolder per title; the default layout.
+	"""
+	FOLDERS
+	"""
+	Media files sit directly in the library root.
+	"""
+	FLAT
 }
 
 type MutationRoot {

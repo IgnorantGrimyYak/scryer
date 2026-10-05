@@ -510,6 +510,9 @@ const zh_TW: LocaleDictionary = {
   "settings.unsavedLibraryChangesTitle": "未儲存的媒體庫變更",
   "settings.unsavedLibraryChangesConfirm": "放棄未儲存的媒體庫變更並離開此頁面？",
   "settings.libraryScanTitle": "媒體庫掃描",
+  "settings.libraryMovieLayoutLabel": "媒體佈局",
+  "settings.libraryMovieLayoutFolders": "子資料夾（每個標題一個資料夾）",
+  "settings.libraryMovieLayoutFlat": "平鋪檔案（媒體直接位於庫根目錄）",
   "settings.libraryScanButton": "掃描媒體庫",
   "settings.libraryScanRunning": "正在掃描媒體庫…",
   "settings.libraryScanSummary": "已匯入 {{imported}} 個，跳過 {{skipped}} 個，未匹配 {{unmatched}} 個。",
@@ -1367,6 +1370,8 @@ const zh_TW: LocaleDictionary = {
   "pendingImports.library": "媒體庫：",
   "pendingImports.knownTitle": "已知作品：",
   "pendingImports.reason.title_already_owns_another_folder": "作品已擁有另一個資料夾",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "此檔案與已擁有資料夾的標題相符。請將其移至該資料夾，或將此庫切換回子資料夾模式。",
   "pendingImports.reason.metadata_id_lookup_unresolved": "中繼資料查詢無法解析此資料夾的外部 ID；下次掃描將重試",
   "pendingImports.reason.folder_ownership_changed_by_user": "資料夾歸屬已由使用者更改",
   "pendingImports.folderOwnershipChangedHelp": "此資料夾已分配給另一個標題，因此該標題不再擁有資料夾。請開啟該標題並使用“更改資料夾”指向正確的資料夾，或使用“忽略”隱藏此專案。",

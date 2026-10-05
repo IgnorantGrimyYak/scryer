@@ -558,6 +558,7 @@ function librarySettingsInput(
     nfoWriteOnImport: settings.nfoWriteOnImport,
     plexmatchWriteOnImport: settings.plexmatchWriteOnImport,
     importMode: settings.importMode,
+    movieRootLayout: settings.movieRootLayout,
     setPermissionsLinux: settings.setPermissionsLinux,
     fileChmod: settings.fileChmod,
     folderChmod: settings.folderChmod,

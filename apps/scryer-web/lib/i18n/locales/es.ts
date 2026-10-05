@@ -369,6 +369,10 @@ const es: LocaleDictionary = {
     "Esta carpeta raíz ya está en uso por {{libraries}}.",
   "settings.rootFolderSetDefault": "Establecer como predeterminada",
   "settings.libraryScanTitle": "Escaneo de biblioteca",
+  "settings.libraryMovieLayoutLabel": "Diseño de medios",
+  "settings.libraryMovieLayoutFolders": "Subcarpetas (una carpeta por título)",
+  "settings.libraryMovieLayoutFlat":
+    "Archivos planos (medios directamente en la raíz de la biblioteca)",
   "settings.libraryScanButton": "Escanear biblioteca",
   "settings.libraryScanRunning": "Escaneando biblioteca…",
   "settings.libraryScanSummary":
@@ -1001,6 +1005,8 @@ const es: LocaleDictionary = {
     "{{name}} perdió {{folder}} y ahora está sin coincidencia. Repárelo en Importaciones pendientes, donde aparece con el motivo «Propiedad de la carpeta cambiada por el usuario».",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "Propiedad de la carpeta cambiada por el usuario",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Este archivo coincide con un título al que ya le pertenece una carpeta. Muévelo a esa carpeta o vuelve a cambiar esta biblioteca a subcarpetas.",
   "pendingImports.folderOwnershipChangedHelp":
     "Esta carpeta se asignó a otro título, por lo que este título ya no tiene ninguna. Abra el título y use Cambiar carpeta para apuntarlo a la carpeta correcta, o use Ignorar para ocultar este elemento.",
   "pendingImports.title": "Importaciones pendientes",

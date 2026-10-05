@@ -366,6 +366,11 @@ const de: LocaleDictionary = {
     "Dieser Stammordner wird bereits von {{libraries}} verwendet.",
   "settings.rootFolderSetDefault": "Als Standard festlegen",
   "settings.libraryScanTitle": "Bibliothek scannen",
+  "settings.libraryMovieLayoutLabel": "Medienlayout",
+  "settings.libraryMovieLayoutFolders":
+    "Unterverzeichnisse (ein Verzeichnis pro Titel)",
+  "settings.libraryMovieLayoutFlat":
+    "Flache Struktur (Medien direkt im Bibliotheksstammverzeichnis)",
   "settings.libraryScanButton": "Bibliothek scannen",
   "settings.libraryScanRunning": "Bibliothek wird gescannt…",
   "settings.libraryScanSummary":
@@ -992,6 +997,8 @@ const de: LocaleDictionary = {
     "{{name}} hat {{folder}} verloren und ist jetzt nicht zugeordnet. Reparieren Sie den Titel unter „Ausstehende Importe“, wo er mit dem Grund „Ordnerzuordnung vom Benutzer geändert“ erscheint.",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "Ordnerzuordnung vom Benutzer geändert",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Diese Datei passt zu einem Titel, dem bereits ein Verzeichnis zugeordnet ist. Verschieben Sie sie in dieses Verzeichnis oder stellen Sie diese Bibliothek wieder auf Unterverzeichnisse um.",
   "pendingImports.folderOwnershipChangedHelp":
     "Dieser Ordner wurde einem anderen Titel zugewiesen, daher hat dieser Titel keinen Ordner mehr. Öffnen Sie den Titel und weisen Sie ihm über „Ordner ändern“ den richtigen Ordner zu, oder blenden Sie diesen Eintrag mit „Ignorieren“ aus.",
   "pendingImports.title": "Ausstehende Importe",

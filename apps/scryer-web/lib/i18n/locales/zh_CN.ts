@@ -356,6 +356,9 @@ const zh_CN: LocaleDictionary = {
   "settings.rootFolderConflict": "此根文件夹已被 {{libraries}} 使用。",
   "settings.rootFolderSetDefault": "设为默认",
   "settings.libraryScanTitle": "媒体库扫描",
+  "settings.libraryMovieLayoutLabel": "媒体布局",
+  "settings.libraryMovieLayoutFolders": "子文件夹（每个标题一个文件夹）",
+  "settings.libraryMovieLayoutFlat": "平铺文件（媒体直接位于库根目录）",
   "settings.libraryScanButton": "扫描媒体库",
   "settings.libraryScanRunning": "正在扫描媒体库…",
   "settings.libraryScanSummary":
@@ -926,6 +929,8 @@ const zh_CN: LocaleDictionary = {
     "{{name}} 失去了 {{folder}}，现在处于未匹配状态。请在待处理的导入中修复，它会以“文件夹归属已由用户更改”作为原因显示。",
   "pendingImports.reason.folder_ownership_changed_by_user":
     "文件夹归属已由用户更改",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "此文件与已拥有文件夹的标题匹配。请将其移到该文件夹，或将此库切换回子文件夹模式。",
   "pendingImports.folderOwnershipChangedHelp":
     "此文件夹已分配给另一个标题，因此该标题不再拥有文件夹。请打开该标题并使用“更改文件夹”指向正确的文件夹，或使用“忽略”隐藏此项目。",
   "pendingImports.title": "待处理的进口",

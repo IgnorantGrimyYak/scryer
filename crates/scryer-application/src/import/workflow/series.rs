@@ -78,8 +78,15 @@ async fn import_series_download(
         folder_template,
         season_folder_template,
         specials_folder_template,
+        movie_root_layout,
     } = resolve_import_paths(app, title).await?;
-    let full_folder_path = effective_title_folder_path(&media_root, title, &folder_template, None);
+    let full_folder_path = effective_title_folder_path(
+        &media_root,
+        title,
+        &folder_template,
+        None,
+        movie_root_layout,
+    );
     ensure_import_title_folder_available(app, title, &full_folder_path).await?;
 
     let quality_profile = resolve_import_quality_profile(app, title).await?;
@@ -1725,7 +1732,8 @@ async fn import_single_episode_file(
             &ep_meta.episode_numbers,
             resolved_episode.and_then(|episode| episode.episode_number.as_deref()),
         );
-        let absolute_number = import_absolute_episode_token(resolved_episode, ep_meta.absolute_episode);
+        let absolute_number =
+            import_absolute_episode_token(resolved_episode, ep_meta.absolute_episode);
         (season, episode_number, absolute_number)
     };
     let post_processing_episode = if uses_catalog_identity {
@@ -2036,6 +2044,10 @@ pub(crate) async fn resolve_import_paths(
         )
         .await?,
     );
+    // Non-movie libraries never have the layout row, so the resolver's
+    // folders default covers them without a facet branch here.
+    let movie_root_layout =
+        crate::library_discovery::resolve_movie_library_layout(app, &title.library_id).await;
 
     Ok(ImportPathSettings {
         media_root,
@@ -2044,6 +2056,7 @@ pub(crate) async fn resolve_import_paths(
         folder_template,
         season_folder_template,
         specials_folder_template,
+        movie_root_layout,
     })
 }
 

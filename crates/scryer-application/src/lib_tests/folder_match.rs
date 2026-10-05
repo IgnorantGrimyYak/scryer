@@ -1800,3 +1800,118 @@ async fn folder_reconciliation_of_an_unchanged_folder_keeps_analysis_and_layout_
         folder.to_str()
     );
 }
+
+// ── Root-ownership invariant (flat movie libraries) ─────────────────────
+//
+// A title owns a directory, never the library root. Flat-layout movie
+// libraries place files directly in the root, so ensure/claim at the root
+// must be a no-op for a folderless title — while a title that already owns
+// a folder keeps the normal rejection and never gains the root.
+
+#[tokio::test]
+async fn root_ownership_invariant_treats_the_media_root_as_a_noop_for_a_folderless_title() {
+    let fixture = FolderMatchFixture::new().await;
+    let root = fixture.root.path();
+    let title = fixture
+        .app
+        .add_title(
+            &fixture.user,
+            NewTitle {
+                name: "Loose Movie".to_string(),
+                facet: MediaFacet::Movie,
+                monitored: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("create folderless movie title");
+
+    crate::folder_ownership::ensure_folder_available_to_title(&fixture.app, &title, root)
+        .await
+        .expect("ensuring the media root must be a no-op");
+
+    let mut title = title.clone();
+    crate::folder_ownership::claim_title_folder_if_missing(&fixture.app, &mut title, root)
+        .await
+        .expect("claiming the media root must be a no-op");
+    assert!(
+        title
+            .folder_path
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty(),
+        "the root must not be claimed, got {:?}",
+        title.folder_path
+    );
+    assert!(
+        fixture
+            .folder_path_of(&title.id)
+            .await
+            .map(|stored| stored.trim().is_empty())
+            .unwrap_or(true),
+        "the root must not be claimed in the catalog"
+    );
+}
+
+#[tokio::test]
+async fn root_ownership_invariant_keeps_the_rejection_for_a_folder_owned_title() {
+    let fixture = FolderMatchFixture::new().await;
+    let root = fixture.root.path();
+    let owned = root.join("Frozen Movie (2020)");
+    let title = fixture
+        .create_title_with_folder("Frozen Movie", &owned)
+        .await;
+
+    let error =
+        crate::folder_ownership::ensure_folder_available_to_title(&fixture.app, &title, root)
+            .await
+            .expect_err("a root file may not attach to a title that owns another folder");
+    assert!(
+        error.to_string().contains("already owns another folder"),
+        "unexpected error: {error}"
+    );
+
+    let mut title = title.clone();
+    let error =
+        crate::folder_ownership::claim_title_folder_if_missing(&fixture.app, &mut title, root)
+            .await
+            .expect_err("claiming the root for a folder-owned title must fail");
+    assert!(
+        error.to_string().contains("already owns another folder"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(
+        title.folder_path.as_deref(),
+        owned.to_str(),
+        "the frozen folder must be untouched"
+    );
+}
+
+#[tokio::test]
+async fn root_ownership_invariant_leaves_real_subfolder_claims_unchanged() {
+    let fixture = FolderMatchFixture::new().await;
+    let sub = fixture.root.path().join("Claimed Movie (2021)");
+    let title = fixture
+        .app
+        .add_title(
+            &fixture.user,
+            NewTitle {
+                name: "Claimed Movie".to_string(),
+                facet: MediaFacet::Movie,
+                monitored: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("create folderless movie title");
+
+    let mut title = title.clone();
+    crate::folder_ownership::claim_title_folder_if_missing(&fixture.app, &mut title, &sub)
+        .await
+        .expect("claiming a real subfolder must still work");
+    assert_eq!(
+        fixture.folder_path_of(&title.id).await.as_deref(),
+        sub.to_str()
+    );
+}

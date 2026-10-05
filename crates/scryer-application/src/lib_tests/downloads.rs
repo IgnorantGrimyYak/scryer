@@ -10463,6 +10463,7 @@ async fn path_manual_import_rejects_another_title_folder_before_source_mutation(
         &candidate,
         &import_paths.folder_template,
         None,
+        import_paths.movie_root_layout,
     );
     app.services
         .catalog
@@ -17700,4 +17701,163 @@ async fn due_observation_touches_are_batched_into_one_call_and_throttled() {
     }
     crate::download_identity::flush_shared_observation_touches(&app).await;
     assert_eq!(touch_batches.lock().await.len(), 1);
+}
+
+// ── Flat movie libraries: import placement (change 4) ────────────────────
+//
+// A flat layout places a folderless movie's imported file directly in the
+// library root and never claims the root as a title folder. A title that
+// already owns a folder keeps receiving imports into that folder.
+
+#[tokio::test]
+async fn a_flat_movie_library_import_lands_a_folderless_title_directly_in_the_root() {
+    let release_title = "Flat Loose Movie.2026.1080p.WEB-DL.x264-GRP";
+    let fixture = disposition_fixture("Flat Loose Movie", release_title).await;
+
+    // The fixture seeds the title's folder; a flat library's title is
+    // folderless, so clear it before the import.
+    fixture
+        .app
+        .services
+        .catalog
+        .titles
+        .set_folder_path(&fixture.title.id, "")
+        .await
+        .expect("clear the title folder path");
+
+    let library = fixture
+        .app
+        .services
+        .catalog
+        .libraries
+        .default_for_facet(MediaFacet::Movie)
+        .await
+        .expect("library lookup")
+        .expect("movie library exists");
+    fixture
+        .app
+        .update_library_settings(
+            &fixture.user,
+            &library.id,
+            LibrarySettingsOverrideDraft {
+                movie_root_layout: Some(MovieRootLayout::Flat),
+                ..empty_library_settings_override()
+            },
+        )
+        .await
+        .expect("flat layout override should save");
+
+    let library_root = fixture
+        .title_folder
+        .parent()
+        .expect("the fixture folder sits under the library root")
+        .to_path_buf();
+    let mut tracked = fixture.tracked_import_pending();
+    {
+        let _probe = probe_agrees_with_the_name(1920, 1080);
+        assert!(
+            !crate::completed_download_handler::import(&fixture.app, &fixture.user, &mut tracked)
+                .await
+        );
+    }
+    let result = fixture.latest_import_result().await;
+    assert_eq!(
+        result.decision,
+        scryer_domain::ImportDecision::Imported,
+        "{result:?}"
+    );
+
+    let primaries = primary_movie_files(&fixture).await;
+    assert_eq!(
+        primaries.len(),
+        1,
+        "exactly one imported file: {primaries:?}"
+    );
+    let imported = Path::new(&primaries[0].file_path);
+    assert_eq!(
+        imported.parent(),
+        Some(library_root.as_path()),
+        "the file must sit directly in the library root, got {}",
+        imported.display()
+    );
+    assert!(
+        !fixture.title_folder.exists(),
+        "a flat import must not create the title subfolder"
+    );
+    let stored = fixture
+        .app
+        .services
+        .catalog
+        .titles
+        .get_by_id(&fixture.title.id)
+        .await
+        .expect("load title")
+        .expect("title exists");
+    assert!(
+        stored
+            .folder_path
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty(),
+        "a flat import must not claim the root, got {:?}",
+        stored.folder_path
+    );
+}
+
+#[tokio::test]
+async fn a_flat_movie_library_still_imports_a_folder_owned_title_into_its_folder() {
+    let release_title = "Frozen Flat Movie.2026.1080p.WEB-DL.x264-GRP";
+    let fixture = disposition_fixture("Frozen Flat Movie", release_title).await;
+
+    let library = fixture
+        .app
+        .services
+        .catalog
+        .libraries
+        .default_for_facet(MediaFacet::Movie)
+        .await
+        .expect("library lookup")
+        .expect("movie library exists");
+    fixture
+        .app
+        .update_library_settings(
+            &fixture.user,
+            &library.id,
+            LibrarySettingsOverrideDraft {
+                movie_root_layout: Some(MovieRootLayout::Flat),
+                ..empty_library_settings_override()
+            },
+        )
+        .await
+        .expect("flat layout override should save");
+
+    let mut tracked = fixture.tracked_import_pending();
+    {
+        let _probe = probe_agrees_with_the_name(1920, 1080);
+        assert!(
+            !crate::completed_download_handler::import(&fixture.app, &fixture.user, &mut tracked)
+                .await
+        );
+    }
+    let result = fixture.latest_import_result().await;
+    assert_eq!(
+        result.decision,
+        scryer_domain::ImportDecision::Imported,
+        "{result:?}"
+    );
+
+    let primaries = primary_movie_files(&fixture).await;
+    assert_eq!(
+        primaries.len(),
+        1,
+        "exactly one imported file: {primaries:?}"
+    );
+    let imported = Path::new(&primaries[0].file_path);
+    assert_eq!(
+        imported.parent(),
+        Some(fixture.title_folder.as_path()),
+        "a frozen folder-owned title must keep receiving imports into its folder, got {}",
+        imported.display()
+    );
 }

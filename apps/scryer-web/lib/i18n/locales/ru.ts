@@ -519,6 +519,11 @@ const ru: LocaleDictionary = {
     "settings.unsavedLibraryChangesConfirm":
         "Отменить несохранённые изменения библиотеки и покинуть эту страницу?",
     "settings.libraryScanTitle": "Сканирование библиотеки",
+  "settings.libraryMovieLayoutLabel": "Раскладка медиафайлов",
+  "settings.libraryMovieLayoutFolders":
+    "Подпапки (по папке на каждый заголовок)",
+  "settings.libraryMovieLayoutFlat":
+    "Файлы в корне (медиафайлы прямо в корне библиотеки)",
     "settings.libraryScanHelp":
         "Просканируйте папку с фильмами и импортируйте отсутствующие материалы.",
     "settings.libraryScanButton": "Сканировать библиотеку",
@@ -1542,6 +1547,8 @@ const ru: LocaleDictionary = {
     "pendingImports.library": "Библиотека:",
     "pendingImports.knownTitle": "Известное название:",
     "pendingImports.reason.title_already_owns_another_folder": "Материал уже связан с другой папкой",
+  "pendingImports.reason.loose_file_matches_folder_owned_title":
+    "Этот файл совпадает с заголовком, у которого уже есть папка. Переместите его в эту папку или переключите библиотеку обратно на подпапки.",
     "pendingImports.reason.folder_ownership_changed_by_user":
         "Владение папкой изменено пользователем",
     "pendingImports.folderOwnershipChangedHelp":

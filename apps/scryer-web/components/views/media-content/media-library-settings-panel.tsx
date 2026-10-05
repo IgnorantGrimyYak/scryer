@@ -113,6 +113,10 @@ const IMPORT_MODE_OPTIONS = [
   { value: "HARDLINK_OR_COPY", labelKey: "settings.importModeHardlinkCopy" },
   { value: "MOVE", labelKey: "settings.importModeMove" },
 ] as const;
+const MOVIE_ROOT_LAYOUT_OPTIONS = [
+  { value: "FOLDERS", labelKey: "settings.libraryMovieLayoutFolders" },
+  { value: "FLAT", labelKey: "settings.libraryMovieLayoutFlat" },
+] as const;
 
 type LibraryMutationInput = {
   name: string;
@@ -325,6 +329,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
   const [draftNfoWriteOnImport, setDraftNfoWriteOnImport] = React.useState(INHERIT_VALUE);
   const [draftPlexmatchWriteOnImport, setDraftPlexmatchWriteOnImport] = React.useState(INHERIT_VALUE);
   const [draftImportMode, setDraftImportMode] = React.useState(INHERIT_VALUE);
+  const [draftMovieRootLayout, setDraftMovieRootLayout] = React.useState("FOLDERS");
   const [draftSetPermissionsLinux, setDraftSetPermissionsLinux] = React.useState(INHERIT_VALUE);
   const [draftFileChmod, setDraftFileChmod] = React.useState("");
   const [draftFolderChmod, setDraftFolderChmod] = React.useState("");
@@ -379,6 +384,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
   }, [canCreateLibrary, libraries, mode]);
   const currentFacet = activeLibrary?.facet ?? facet;
   const isAnimeFacet = currentFacet === "ANIME";
+  const isMovieFacet = currentFacet === "MOVIE";
   const isEpisodicFacet = currentFacet === "SERIES" || currentFacet === "ANIME";
   const showPlexmatch = currentFacet === "SERIES" || currentFacet === "ANIME";
   const savedDownloadClientRoutingEntries =
@@ -420,6 +426,9 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
         booleanOverrideSelectValue(settings?.plexmatchWriteOnImportOverride),
       );
       setDraftImportMode(settings?.importModeOverride ?? INHERIT_VALUE);
+      setDraftMovieRootLayout(
+        settings?.movieRootLayoutOverride === "FLAT" ? "FLAT" : "FOLDERS",
+      );
       setDraftSetPermissionsLinux(
         booleanOverrideSelectValue(settings?.setPermissionsLinuxOverride),
       );
@@ -470,6 +479,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
       setDraftNfoWriteOnImport(INHERIT_VALUE);
       setDraftPlexmatchWriteOnImport(INHERIT_VALUE);
       setDraftImportMode(INHERIT_VALUE);
+      setDraftMovieRootLayout("FOLDERS");
       setDraftSetPermissionsLinux(INHERIT_VALUE);
       setDraftFileChmod("");
       setDraftFolderChmod("");
@@ -679,6 +689,8 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
           : null,
         importMode:
           draftImportMode === INHERIT_VALUE ? null : (draftImportMode as ImportMode),
+        movieRootLayout:
+          isMovieFacet && draftMovieRootLayout === "FLAT" ? "FLAT" : null,
         setPermissionsLinux: booleanOverrideFromSelectValue(draftSetPermissionsLinux),
         fileChmod: draftFileChmod.trim() === "" ? null : draftFileChmod.trim(),
         folderChmod: draftFolderChmod.trim() === "" ? null : draftFolderChmod.trim(),
@@ -700,6 +712,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
       draftFolderChmod,
       draftImportMode,
       draftInterSeasonMovies,
+      draftMovieRootLayout,
       draftMonitorFillerMovies,
       draftMonitorSpecials,
       draftNfoWriteOnImport,
@@ -713,6 +726,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
       draftUseSeasonFolders,
       isAnimeFacet,
       isEpisodicFacet,
+      isMovieFacet,
       savedSettings,
       showPlexmatch,
     ],
@@ -738,6 +752,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
         settingsDraft.plexmatchWriteOnImport !==
           savedSettings.plexmatchWriteOnImportOverride ||
         settingsDraft.importMode !== savedSettings.importModeOverride ||
+        settingsDraft.movieRootLayout !== savedSettings.movieRootLayoutOverride ||
         settingsDraft.setPermissionsLinux !== savedSettings.setPermissionsLinuxOverride ||
         settingsDraft.fileChmod !== savedSettings.fileChmodOverride ||
         settingsDraft.folderChmod !== savedSettings.folderChmodOverride ||
@@ -820,6 +835,7 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
       setDraftNfoWriteOnImport(INHERIT_VALUE);
       setDraftPlexmatchWriteOnImport(INHERIT_VALUE);
       setDraftImportMode(INHERIT_VALUE);
+      setDraftMovieRootLayout("FOLDERS");
       setDraftSetPermissionsLinux(INHERIT_VALUE);
       setDraftFileChmod("");
       setDraftFolderChmod("");
@@ -1463,6 +1479,38 @@ export const MediaLibrarySettingsPanel = React.memo(function MediaLibrarySetting
                           value: savedSettings.useSeasonFolders
                             ? t("label.enabled")
                             : t("label.disabled"),
+                        })}
+                      </EffectiveChip>
+                    ) : null}
+                  </div>
+                ) : null}
+                {isMovieFacet ? (
+                  <div className="space-y-2">
+                    <Label>{t("settings.libraryMovieLayoutLabel")}</Label>
+                    <Select
+                      value={draftMovieRootLayout}
+                      onValueChange={setDraftMovieRootLayout}
+                      disabled={settingsBusy}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MOVIE_ROOT_LAYOUT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {t(option.labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {savedSettings ? (
+                      <EffectiveChip>
+                        {t("settings.libraryEffectiveProfile", {
+                          value: t(
+                            savedSettings.movieRootLayout === "FLAT"
+                              ? "settings.libraryMovieLayoutFlat"
+                              : "settings.libraryMovieLayoutFolders",
+                          ),
                         })}
                       </EffectiveChip>
                     ) : null}

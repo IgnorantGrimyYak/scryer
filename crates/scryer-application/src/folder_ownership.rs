@@ -147,6 +147,27 @@ pub(crate) async fn ensure_folder_move_available_to_title(
     Ok(())
 }
 
+/// Whether `folder_path` is the title's own media root.
+///
+/// Callers use this for the root-ownership invariant: a title owns a
+/// directory, never the library root (the same rule the scan pipeline
+/// documents), so a flat-layout movie library — which places files directly
+/// in the root — treats ownership operations at the root as a no-op for a
+/// folderless title instead of claiming or conflicting on the root. A title
+/// that already owns a folder keeps the normal flow (and its "owns another
+/// folder" rejection), so the invariant never weakens a frozen title.
+async fn is_title_media_root(
+    app: &AppUseCase,
+    title: &Title,
+    folder_path: &Path,
+) -> AppResult<bool> {
+    let media_root = app.title_root_folder_path_override(title).await?;
+    Ok(folder_paths_match(
+        &media_root,
+        &path_to_stored_string(folder_path),
+    ))
+}
+
 pub(crate) async fn ensure_folder_available_to_title(
     app: &AppUseCase,
     title: &Title,
@@ -154,6 +175,11 @@ pub(crate) async fn ensure_folder_available_to_title(
 ) -> AppResult<()> {
     if folder_path.as_os_str().is_empty() {
         return Err(AppError::Validation("title folder path is required".into()));
+    }
+    if non_empty_folder_path(title.folder_path.as_deref()).is_none()
+        && is_title_media_root(app, title, folder_path).await?
+    {
+        return Ok(());
     }
     let folder_path = path_to_stored_string(folder_path);
 
@@ -186,6 +212,13 @@ pub(crate) async fn claim_title_folder_if_missing(
     title: &mut Title,
     folder_path: &Path,
 ) -> AppResult<()> {
+    if non_empty_folder_path(title.folder_path.as_deref()).is_none()
+        && is_title_media_root(app, title, folder_path).await?
+    {
+        // The root is never a claimable folder: flat-layout imports place
+        // files directly in it and the folderless title keeps owning nothing.
+        return Ok(());
+    }
     ensure_folder_available_to_title(app, title, folder_path).await?;
     if non_empty_folder_path(title.folder_path.as_deref()).is_some() {
         return Ok(());
